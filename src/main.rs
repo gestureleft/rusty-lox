@@ -27,7 +27,7 @@ fn main() -> Result<(), Error> {
 fn load_file_from_args() -> Result<String, Error> {
     let file_path = std::env::args().nth(1).ok_or(Error::Usage)?;
 
-    fs::read_to_string(file_path).map_err(Error::Io)
+    Ok(fs::read_to_string(file_path)?)
 }
 
 fn print_usage() {
