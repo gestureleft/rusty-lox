@@ -301,8 +301,8 @@ enum NextResult {
 
 #[derive(Debug)]
 pub struct Result {
-    errors: Vec<Error>,
-    tokens: Vec<Token>,
+    pub errors: Vec<Error>,
+    pub tokens: Vec<Token>,
 }
 
 #[derive(Debug, Clone)]
@@ -394,6 +394,115 @@ impl TokenType {
 pub enum Error {
     UnterminatedStringLiteral { starting_at: usize },
     UnexpectedToken { at: usize },
+}
+
+struct LinesForErrorDisplay {
+    pub line_before: Option<Span>,
+    pub line: Span,
+    // line_after: Span,
+    pub line_number_of_error: usize,
+}
+
+impl Error {
+    fn lines_for_error_display(source: &str, error_starts_at: usize) -> LinesForErrorDisplay {
+        assert!(error_starts_at < source.len());
+        // Index into the source the start of the current line
+        let mut previous_line_start = 0;
+        let mut current_line_start = 0;
+        let mut line_number = 1;
+        for (index, value) in source.chars().enumerate() {
+            if index == error_starts_at {
+                break;
+            };
+            if value == '\n' && index < source.len() - 1 {
+                previous_line_start = current_line_start;
+                current_line_start = index + 1;
+                line_number += 1;
+            };
+        }
+        let next_new_line = {
+            let mut i = error_starts_at;
+            let mut current_char = source.chars().nth(i);
+            while current_char.is_some() && current_char != Some('\n') {
+                i += 1;
+                current_char = source.chars().nth(i);
+            }
+            i
+        };
+
+        let line_before = {
+            if line_number == 1 {
+                None
+            } else {
+                Some(Span::new(previous_line_start, current_line_start))
+            }
+        };
+
+        LinesForErrorDisplay {
+            line_before,
+            line: Span::new(current_line_start, next_new_line),
+            line_number_of_error: line_number,
+        }
+    }
+
+    pub fn display(&self, source: &str) {
+        match self {
+            Error::UnterminatedStringLiteral { starting_at } => Self::display_error(
+                source,
+                Span::new(
+                    *starting_at,
+                    Self::index_of_first_new_line_after(source, *starting_at),
+                ),
+                "Unterminated String Literal",
+            ),
+            Error::UnexpectedToken { at } => {
+                Self::display_error(source, Span::new(*at, *at + 1), "Unexpected token")
+            }
+        }
+    }
+
+    /// Given some source and an index, return the index of the next newline after the given index in the source
+    fn index_of_first_new_line_after(source: &str, index: usize) -> usize {
+        let mut i = index;
+        let mut current_char = source.chars().nth(i);
+        while current_char.is_some() && current_char != Some('\n') {
+            i += 1;
+            current_char = source.chars().nth(i);
+        }
+        i
+    }
+
+    fn display_error<'a>(source: &'a str, span: Span, error: &'a str) {
+        let lines = Error::lines_for_error_display(source, span.start);
+
+        println!("\n  \x1b[31mError:\x1b[0m {}\n", error);
+        if let Some(line_before) = lines.line_before {
+            // FIXME: We may need padding here if the number of digits in `line_number - 1` is
+            // less than `line_number`
+            print!(
+                " \x1b[34m{}\x1b[0m |  {}",
+                lines.line_number_of_error - 1,
+                line_before.slice(source)
+            )
+        }
+
+        println!(
+            " \x1b[34m{}\x1b[0m |  {}",
+            lines.line_number_of_error,
+            lines.line.slice(source)
+        );
+
+        // FIXME: The amount of padding here should be dependent on the width of `line_number`
+        println!(
+            "      \x1b[31m{}{}=== {}\x1b[0m",
+            (0..span.start - lines.line.start)
+                .map(|_| ' ')
+                .collect::<String>(),
+            (0..span.end - span.start).map(|_| '^').collect::<String>(),
+            error
+        );
+        println!();
+    }
 }
 
 #[cfg(test)]

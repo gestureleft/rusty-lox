@@ -11,7 +11,12 @@ pub fn run_repl() -> Result<(), Error> {
         stdout().flush()?;
         stdin.read_line(&mut buffer)?;
         let tokens = Lexer::lex(&buffer);
-        println!("Got tokens: {:?}", tokens);
+
+        if tokens.errors.len() > 0 {
+            let error = &tokens.errors[0];
+            error.display(&buffer);
+        }
+
         if buffer == *"\n" {
             break;
         };
