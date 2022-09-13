@@ -1,5 +1,7 @@
 mod error;
+mod lexer;
 mod repl;
+mod span;
 
 use std::fs;
 
