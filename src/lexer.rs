@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::span::Span;
 
@@ -390,7 +390,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     UnterminatedStringLiteral { starting_at: usize },
     UnexpectedToken { at: usize },
