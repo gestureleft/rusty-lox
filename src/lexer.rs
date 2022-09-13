@@ -307,7 +307,7 @@ pub struct Result {
 
 #[derive(Debug, Clone)]
 pub struct Token {
-    span: Span,
+    pub span: Span,
     pub type_: TokenType,
 }
 

@@ -1,4 +1,5 @@
 mod error;
+mod expression;
 mod lexer;
 mod repl;
 mod span;
