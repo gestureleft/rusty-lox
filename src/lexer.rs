@@ -395,3 +395,38 @@ pub enum Error {
     UnterminatedStringLiteral { starting_at: usize },
     UnexpectedToken { at: usize },
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn number() {
+        let lex_result = Lexer::lex("2.34");
+        assert_eq!(lex_result.errors.len(), 0);
+        assert_eq!(lex_result.tokens.len(), 2);
+        assert_eq!(lex_result.tokens[0].type_, TokenType::Number);
+        assert_eq!(lex_result.tokens[0].span.start, 0);
+        assert_eq!(lex_result.tokens[0].span.end, 4);
+        assert_eq!(lex_result.tokens[1].type_, TokenType::Eof);
+        assert_eq!(lex_result.tokens[1].span.start, 4);
+        assert_eq!(lex_result.tokens[1].span.end, 5);
+    }
+
+    #[test]
+    fn bad_number() {
+        let lex_result = Lexer::lex("2.");
+        assert_eq!(lex_result.errors.len(), 0);
+        assert_eq!(lex_result.tokens.len(), 3);
+        assert_eq!(lex_result.tokens[0].type_, TokenType::Number);
+        assert_eq!(lex_result.tokens[1].type_, TokenType::Dot);
+        assert_eq!(lex_result.tokens[2].type_, TokenType::Eof);
+
+        let lex_result = Lexer::lex(".2");
+        assert_eq!(lex_result.errors.len(), 0);
+        assert_eq!(lex_result.tokens.len(), 3);
+        assert_eq!(lex_result.tokens[0].type_, TokenType::Dot);
+        assert_eq!(lex_result.tokens[1].type_, TokenType::Number);
+        assert_eq!(lex_result.tokens[2].type_, TokenType::Eof);
+    }
+}
