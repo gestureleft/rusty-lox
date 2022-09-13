@@ -429,4 +429,15 @@ mod tests {
         assert_eq!(lex_result.tokens[1].type_, TokenType::Number);
         assert_eq!(lex_result.tokens[2].type_, TokenType::Eof);
     }
+
+    #[test]
+    fn string() {
+        let lex_result = Lexer::lex(r#" "hello" "#);
+        assert_eq!(lex_result.errors.len(), 0);
+        assert_eq!(lex_result.tokens.len(), 2);
+        assert_eq!(lex_result.tokens[0].type_, TokenType::String_);
+        assert_eq!(lex_result.tokens[1].type_, TokenType::Eof);
+        assert_eq!(lex_result.tokens[0].span.start, 1);
+        assert_eq!(lex_result.tokens[0].span.end, 8);
+    }
 }
