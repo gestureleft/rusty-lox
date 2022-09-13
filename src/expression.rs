@@ -1,101 +1,100 @@
 use crate::lexer::Token;
 
 #[derive(Debug)]
-pub enum Expression {
-    Assignment(AssignmentExpression),
-    Binary(BinaryExpression),
-    Call(CallExpression),
-    Get(GetExpression),
-    Grouping(GroupingExpression),
-    Literal(LiteralExpression),
-    Logical(LogicalExpression),
-    Set(SetExpression),
-    Super(SuperExpression),
-    This(ThisExpression),
-    Unary(UnaryExpression),
-    Variable(VariableExpression),
+pub enum Expression<'a> {
+    Assignment(AssignmentExpression<'a>),
+    Binary(BinaryExpression<'a>),
+    Call(CallExpression<'a>),
+    Get(GetExpression<'a>),
+    Grouping(GroupingExpression<'a>),
+    Literal(LiteralExpression<'a>),
+    Logical(LogicalExpression<'a>),
+    Set(SetExpression<'a>),
+    Super(SuperExpression<'a>),
+    This(ThisExpression<'a>),
+    Unary(UnaryExpression<'a>),
+    Variable(VariableExpression<'a>),
 }
 
-/// Expressions reference tokens that are owned by the parser, they do this by indexing into the
-/// parser's array of tokens
-#[derive(Debug)]
-pub struct TokenIndex(pub usize);
-
-impl Expression {
-    pub fn prettify(&self, source: &str, tokens: &Vec<Token>) -> String {
+impl<'a> Expression<'a> {
+    pub fn prettify(&self, source: &str) -> String {
         match self {
             Expression::Assignment(_) => todo!(),
             Expression::Binary(binary_expression) => format!(
                 "({} {} {})",
-                tokens[binary_expression.operator.0].span.slice(source),
-                binary_expression.left.prettify(source, tokens),
-                binary_expression.right.prettify(source, tokens)
+                binary_expression.operator.span.slice(source),
+                binary_expression.left.prettify(source),
+                binary_expression.right.prettify(source)
             ),
             Expression::Call(_) => todo!(),
             Expression::Get(_) => todo!(),
             Expression::Grouping(group) => {
-                format!("(group {})", group.expression.prettify(source, tokens))
+                format!("(group {})", group.expression.prettify(source))
             }
-            Expression::Literal(literal) => literal.prettify(source, tokens),
+            Expression::Literal(literal) => literal.prettify(source),
             Expression::Logical(_) => todo!(),
             Expression::Set(_) => todo!(),
             Expression::Super(_) => todo!(),
             Expression::This(_) => todo!(),
             Expression::Unary(unary_expression) => format!(
                 "({} {})",
-                tokens[unary_expression.operator.0].span.slice(source),
-                unary_expression.right.prettify(source, tokens)
+                unary_expression.operator.span.slice(source),
+                unary_expression.right.prettify(source)
             ),
             Expression::Variable(_) => todo!(),
         }
     }
 }
 
-pub fn binary_expression(left: Expression, right: Expression, operator: TokenIndex) -> Expression {
+pub fn binary_expression<'a>(
+    left: Expression<'a>,
+    right: Expression<'a>,
+    operator: &'a Token,
+) -> Expression<'a> {
     Expression::Binary(BinaryExpression::new(left, right, operator))
 }
 
-pub fn unary_expression(operator: TokenIndex, right: Expression) -> Expression {
+pub fn unary_expression<'a>(operator: &'a Token, right: Expression<'a>) -> Expression<'a> {
     Expression::Unary(UnaryExpression::new(operator, right))
 }
 
-pub fn number_literal_expression(value: TokenIndex) -> Expression {
+pub fn number_literal_expression<'a>(value: &'a Token) -> Expression<'a> {
     Expression::Literal(LiteralExpression::Number(value))
 }
 
-pub fn string_literal_expression(value: TokenIndex) -> Expression {
+pub fn string_literal_expression<'a>(value: &'a Token) -> Expression<'a> {
     Expression::Literal(LiteralExpression::String_(value))
 }
 
-pub fn boolean_literal_expression(value: bool) -> Expression {
+pub fn boolean_literal_expression<'a>(value: bool) -> Expression<'a> {
     Expression::Literal(LiteralExpression::Boolean(value))
 }
 
-pub fn nil_literal() -> Expression {
+pub fn nil_literal<'a>() -> Expression<'a> {
     Expression::Literal(LiteralExpression::Nil)
 }
 
-pub fn grouping_expression(expression: Expression) -> Expression {
+pub fn grouping_expression<'a>(expression: Expression<'a>) -> Expression<'a> {
     Expression::Grouping(GroupingExpression {
         expression: Box::new(expression),
     })
 }
 
 #[derive(Debug)]
-pub struct AssignmentExpression {
-    name: TokenIndex,
-    value: Box<Expression>,
+pub struct AssignmentExpression<'a> {
+    name: &'a Token,
+    value: Box<Expression<'a>>,
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression {
-    left: Box<Expression>,
-    right: Box<Expression>,
-    operator: TokenIndex,
+pub struct BinaryExpression<'a> {
+    left: Box<Expression<'a>>,
+    right: Box<Expression<'a>>,
+    operator: &'a Token,
 }
 
-impl BinaryExpression {
-    pub fn new(left: Expression, right: Expression, operator: TokenIndex) -> Self {
+impl<'a> BinaryExpression<'a> {
+    pub fn new(left: Expression<'a>, right: Expression<'a>, operator: &'a Token) -> Self {
         Self {
             left: Box::new(left),
             right: Box::new(right),
@@ -105,36 +104,36 @@ impl BinaryExpression {
 }
 
 #[derive(Debug)]
-pub struct CallExpression {
-    callee: Box<Expression>,
-    paren: TokenIndex,
-    arguments: Vec<Expression>,
+pub struct CallExpression<'a> {
+    callee: Box<Expression<'a>>,
+    paren: &'a Token,
+    arguments: Vec<Expression<'a>>,
 }
 
 #[derive(Debug)]
-pub struct GetExpression {
-    object: Box<Expression>,
-    name: TokenIndex,
+pub struct GetExpression<'a> {
+    object: Box<Expression<'a>>,
+    name: &'a Token,
 }
 
 #[derive(Debug)]
-pub struct GroupingExpression {
-    expression: Box<Expression>,
+pub struct GroupingExpression<'a> {
+    expression: Box<Expression<'a>>,
 }
 
 #[derive(Debug)]
-pub enum LiteralExpression {
-    String_(TokenIndex),
-    Number(TokenIndex),
+pub enum LiteralExpression<'a> {
+    String_(&'a Token),
+    Number(&'a Token),
     Boolean(bool),
     Nil,
 }
 
-impl LiteralExpression {
-    fn prettify(&self, source: &str, tokens: &Vec<Token>) -> String {
+impl<'a> LiteralExpression<'a> {
+    fn prettify(&self, source: &str) -> String {
         match self {
-            LiteralExpression::String_(token) => tokens[token.0].span.slice(source).into(),
-            LiteralExpression::Number(token) => tokens[token.0].span.slice(source).into(),
+            LiteralExpression::String_(token) => token.span.slice(source).into(),
+            LiteralExpression::Number(token) => token.span.slice(source).into(),
             LiteralExpression::Boolean(boolean) => {
                 if *boolean {
                     "true".into()
@@ -148,38 +147,38 @@ impl LiteralExpression {
 }
 
 #[derive(Debug)]
-pub struct LogicalExpression {
-    left: Box<Expression>,
-    right: Box<Expression>,
-    operator: TokenIndex,
+pub struct LogicalExpression<'a> {
+    left: Box<Expression<'a>>,
+    right: Box<Expression<'a>>,
+    operator: &'a Token,
 }
 
 #[derive(Debug)]
-pub struct SetExpression {
-    object: Box<Expression>,
-    name: TokenIndex,
-    value: Box<Expression>,
+pub struct SetExpression<'a> {
+    object: Box<Expression<'a>>,
+    name: &'a Token,
+    value: Box<Expression<'a>>,
 }
 
 #[derive(Debug)]
-pub struct SuperExpression {
-    keyword: TokenIndex,
-    method: TokenIndex,
+pub struct SuperExpression<'a> {
+    keyword: &'a Token,
+    method: &'a Token,
 }
 
 #[derive(Debug)]
-pub struct ThisExpression {
-    keyword: TokenIndex,
+pub struct ThisExpression<'a> {
+    keyword: &'a Token,
 }
 
 #[derive(Debug)]
-pub struct UnaryExpression {
-    operator: TokenIndex,
-    right: Box<Expression>,
+pub struct UnaryExpression<'a> {
+    operator: &'a Token,
+    right: Box<Expression<'a>>,
 }
 
-impl UnaryExpression {
-    pub fn new(operator: TokenIndex, right: Expression) -> Self {
+impl<'a> UnaryExpression<'a> {
+    pub fn new(operator: &'a Token, right: Expression<'a>) -> Self {
         Self {
             operator,
             right: Box::new(right),
@@ -188,6 +187,6 @@ impl UnaryExpression {
 }
 
 #[derive(Debug)]
-pub struct VariableExpression {
-    name: TokenIndex,
+pub struct VariableExpression<'a> {
+    name: &'a Token,
 }

@@ -2,14 +2,12 @@ use crate::{
     expression::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
         number_literal_expression, string_literal_expression, unary_expression, Expression,
-        TokenIndex,
     },
     lexer::{self, Lexer, Token, TokenType},
 };
 
 pub struct Parser {
     current_index: usize,
-    tokens: Vec<Token>,
     errors: Vec<Error>,
 }
 
@@ -18,113 +16,116 @@ impl Parser {
         let lex_result = Lexer::lex(source);
         let mut parser = Parser {
             current_index: 0,
-            tokens: lex_result.tokens,
             errors: lex_result
                 .errors
                 .iter()
                 .map(|e| Error::Lexer(e.clone()))
                 .collect(),
         };
-        let expression = parser.parse_expression();
+        let expression = parser.parse_expression(&lex_result.tokens);
         if let Some(expression) = expression {
-            println!(
-                "parse() got expression: {:?}",
-                expression.prettify(source, &parser.tokens)
-            );
+            println!("parse() got expression: {:?}", expression.prettify(source));
         }
 
         parser.errors
     }
 
-    fn parse_expression(&mut self) -> Option<Expression> {
-        self.parse_equality()
+    fn parse_expression<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        self.parse_equality(tokens)
     }
 
-    fn parse_equality(&mut self) -> Option<Expression> {
-        let mut expression = self.parse_comparison()?;
+    fn parse_equality<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        let mut expression = self.parse_comparison(tokens)?;
 
-        while self.consume_token_if_in_vec(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
-            let operator = TokenIndex(self.current_index - 1);
-            let right = self.parse_comparison()?;
-            expression = binary_expression(expression, right, operator);
-        }
-
-        Some(expression)
-    }
-    fn parse_comparison(&mut self) -> Option<Expression> {
-        let mut expression = self.parse_term()?;
-
-        while self.consume_token_if_in_vec(&vec![
-            TokenType::Greater,
-            TokenType::GreaterEqual,
-            TokenType::Less,
-            TokenType::LessEqual,
-        ]) {
-            let operator = TokenIndex(self.current_index - 1);
-            let right = self.parse_term()?;
+        while self
+            .consume_token_if_in_vec(tokens, &vec![TokenType::BangEqual, TokenType::EqualEqual])
+        {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = self.parse_comparison(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
 
         Some(expression)
     }
 
-    fn parse_term(&mut self) -> Option<Expression> {
-        let mut expression = self.parse_factor()?;
+    fn parse_comparison<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        let mut expression = self.parse_term(tokens)?;
 
-        while self.consume_token_if_in_vec(&vec![TokenType::Minus, TokenType::Plus]) {
-            let operator = TokenIndex(self.current_index - 1);
-            let right = self.parse_factor()?;
+        while self.consume_token_if_in_vec(
+            tokens,
+            &vec![
+                TokenType::Greater,
+                TokenType::GreaterEqual,
+                TokenType::Less,
+                TokenType::LessEqual,
+            ],
+        ) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = self.parse_term(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
 
         Some(expression)
     }
 
-    fn parse_factor(&mut self) -> Option<Expression> {
-        let mut expression = self.parse_unary()?;
+    fn parse_term<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        let mut expression = self.parse_factor(tokens)?;
 
-        while self.consume_token_if_in_vec(&vec![TokenType::Slash, TokenType::Star]) {
-            let operator = TokenIndex(self.current_index - 1);
-            let right = self.parse_unary()?;
+        while self.consume_token_if_in_vec(tokens, &vec![TokenType::Minus, TokenType::Plus]) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = self.parse_factor(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
 
         Some(expression)
     }
 
-    fn parse_unary(&mut self) -> Option<Expression> {
-        if self.consume_token_if_in_vec(&vec![TokenType::Bang, TokenType::Minus]) {
-            let operator = TokenIndex(self.current_index - 1);
-            let right = self.parse_unary()?;
+    fn parse_factor<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        let mut expression = self.parse_unary(tokens)?;
+
+        while self.consume_token_if_in_vec(tokens, &vec![TokenType::Slash, TokenType::Star]) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = self.parse_unary(tokens)?;
+            expression = binary_expression(expression, right, operator);
+        }
+
+        Some(expression)
+    }
+
+    fn parse_unary<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Bang, TokenType::Minus]) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = self.parse_unary(tokens)?;
             return Some(unary_expression(operator, right));
         };
 
-        self.parse_primary()
+        self.parse_primary(tokens)
     }
 
-    fn parse_primary(&mut self) -> Option<Expression> {
-        if self.consume_token_if_in_vec(&vec![TokenType::False]) {
+    fn parse_primary<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::False]) {
             return Some(boolean_literal_expression(false));
         };
-        if self.consume_token_if_in_vec(&vec![TokenType::True]) {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::True]) {
             return Some(boolean_literal_expression(true));
         };
-        if self.consume_token_if_in_vec(&vec![TokenType::Nil]) {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Nil]) {
             return Some(nil_literal());
         };
-        if self.consume_token_if_in_vec(&vec![TokenType::Number]) {
-            return Some(number_literal_expression(TokenIndex(
-                self.current_index - 1,
-            )));
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Number]) {
+            return Some(number_literal_expression(
+                tokens.get(self.current_index - 1).unwrap(),
+            ));
         };
-        if self.consume_token_if_in_vec(&vec![TokenType::String_]) {
-            return Some(string_literal_expression(TokenIndex(
-                self.current_index - 1,
-            )));
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::String_]) {
+            return Some(string_literal_expression(
+                tokens.get(self.current_index - 1).unwrap(),
+            ));
         };
-        if self.consume_token_if_in_vec(&vec![TokenType::LeftParen, TokenType::RightParen]) {
-            let expression = self.parse_expression()?;
-            let current_token = self.current_token();
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen, TokenType::RightParen])
+        {
+            let expression = self.parse_expression(tokens)?;
+            let current_token = self.current_token(tokens);
 
             if current_token.expect("Unexpectedly ran out of tokens").type_ != TokenType::RightParen
             {
@@ -146,8 +147,8 @@ impl Parser {
 
     /// If the current token's type is in the given list, consume it and return true.
     /// Else, do nothing and return false
-    fn consume_token_if_in_vec(&mut self, token_types: &Vec<TokenType>) -> bool {
-        let current_token = self.current_token();
+    fn consume_token_if_in_vec(&mut self, tokens: &[Token], token_types: &Vec<TokenType>) -> bool {
+        let current_token = self.current_token(tokens);
         if current_token.is_none() {
             return false;
         };
@@ -162,8 +163,8 @@ impl Parser {
         false
     }
 
-    fn current_token(&self) -> Option<&Token> {
-        self.tokens.get(self.current_index)
+    fn current_token<'a>(&self, tokens: &'a [Token]) -> Option<&'a Token> {
+        tokens.get(self.current_index)
     }
 }
 
