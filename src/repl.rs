@@ -1,6 +1,7 @@
 use std::io::{self, stdout, Write};
 
 use crate::error::Error;
+use crate::lexer::Lexer;
 use crate::parser::Parser;
 
 pub fn run_repl() -> Result<(), Error> {
@@ -10,12 +11,12 @@ pub fn run_repl() -> Result<(), Error> {
         print!("> ");
         stdout().flush()?;
         stdin.read_line(&mut buffer)?;
-        let errors = Parser::parse(&buffer);
+        let lexer_result = Lexer::lex(&buffer);
+        let parse_result = Parser::parse(&buffer, &lexer_result.tokens);
 
-        if !errors.is_empty() {
-            let error = &errors[0];
+        if !parse_result.errors.is_empty() {
+            let error = &parse_result.errors[0];
             error.display(&buffer);
-        } else {
         }
 
         if buffer == *"\n" {

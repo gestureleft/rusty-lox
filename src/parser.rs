@@ -3,7 +3,7 @@ use crate::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
         number_literal_expression, string_literal_expression, unary_expression, Expression,
     },
-    lexer::{self, Lexer, Token, TokenType},
+    lexer::{self, Token, TokenType},
 };
 
 pub struct Parser {
@@ -11,30 +11,33 @@ pub struct Parser {
     errors: Vec<Error>,
 }
 
+pub struct ParserResult<'a> {
+    pub errors: Vec<Error>,
+    pub expression: Option<Expression<'a>>,
+}
+
 impl Parser {
-    pub fn parse(source: &str) -> Vec<Error> {
-        let lex_result = Lexer::lex(source);
+    pub fn parse<'a>(source: &'a str, tokens: &'a [Token]) -> ParserResult<'a> {
         let mut parser = Parser {
             current_index: 0,
-            errors: lex_result
-                .errors
-                .iter()
-                .map(|e| Error::Lexer(e.clone()))
-                .collect(),
+            errors: vec![],
         };
-        let expression = parser.parse_expression(&lex_result.tokens);
-        if let Some(expression) = expression {
+        let expression = parser.parse_expression(tokens);
+        if let Some(expression) = expression.as_ref() {
             println!("parse() got expression: {:?}", expression.prettify(source));
         }
 
-        parser.errors
+        ParserResult {
+            errors: parser.errors,
+            expression,
+        }
     }
 
-    fn parse_expression<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_expression<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         self.parse_equality(tokens)
     }
 
-    fn parse_equality<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_equality<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         let mut expression = self.parse_comparison(tokens)?;
 
         while self
@@ -48,7 +51,7 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_comparison<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_comparison<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         let mut expression = self.parse_term(tokens)?;
 
         while self.consume_token_if_in_vec(
@@ -68,7 +71,7 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_term<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_term<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         let mut expression = self.parse_factor(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::Minus, TokenType::Plus]) {
@@ -80,7 +83,7 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_factor<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_factor<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         let mut expression = self.parse_unary(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::Slash, TokenType::Star]) {
@@ -92,7 +95,7 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_unary<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_unary<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Bang, TokenType::Minus]) {
             let operator = tokens.get(self.current_index - 1).unwrap();
             let right = self.parse_unary(tokens)?;
@@ -102,7 +105,7 @@ impl Parser {
         self.parse_primary(tokens)
     }
 
-    fn parse_primary<'a>(&mut self, tokens: &'a Vec<Token>) -> Option<Expression<'a>> {
+    fn parse_primary<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::False]) {
             return Some(boolean_literal_expression(false));
         };
