@@ -122,8 +122,7 @@ impl Parser {
                 tokens.get(self.current_index - 1).unwrap(),
             ));
         };
-        if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen, TokenType::RightParen])
-        {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen]) {
             let expression = self.parse_expression(tokens)?;
             let current_token = self.current_token(tokens);
 
