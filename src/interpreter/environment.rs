@@ -22,4 +22,13 @@ impl Environment {
     pub(crate) fn get(&self, source: &str, token: &Token) -> Option<Value> {
         self.values.get(token.span.slice(source)).cloned()
     }
+
+    pub(crate) fn assign(&mut self, name: String, new_value: Value) -> Result<(), ()> {
+        let value = self.values.get_mut(&name);
+        if let Some(value) = value {
+            *value = new_value;
+            return Ok(());
+        };
+        Err(())
+    }
 }

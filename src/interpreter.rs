@@ -1,7 +1,7 @@
 use crate::{
     expression::{
-        BinaryExpression, Expression, GroupingExpression, LiteralExpression, UnaryExpression,
-        VariableExpression,
+        AssignmentExpression, BinaryExpression, Expression, GroupingExpression, LiteralExpression,
+        UnaryExpression, VariableExpression,
     },
     lexer::{Token, TokenType},
     span::Span,
@@ -92,9 +92,22 @@ impl Interpreter {
         }
     }
 
-    fn evaluate_expression(&self, source: &str, expression: &Expression) -> Result<Value, Error> {
+    fn evaluate_expression(
+        &mut self,
+        source: &str,
+        expression: &Expression,
+    ) -> Result<Value, Error> {
         match expression {
-            Expression::Assignment(_) => todo!(),
+            Expression::Assignment(AssignmentExpression { name, value }) => {
+                let value = self.evaluate_expression(source, value)?;
+                let did_assign = self
+                    .environment
+                    .assign(name.span.slice(source).to_string(), value.clone());
+                if did_assign.is_ok() {
+                    return Ok(value);
+                };
+                Err(Error::VariableDoesntExist((*name).clone()))
+            }
             Expression::Binary(BinaryExpression {
                 left,
                 right,
@@ -123,7 +136,7 @@ impl Interpreter {
     }
 
     fn evaluate_unary_expression(
-        &self,
+        &mut self,
         source: &str,
         operator: &Token,
         right: &Expression,
@@ -208,7 +221,7 @@ impl Interpreter {
     }
 
     fn evaluate_binary_expression(
-        &self,
+        &mut self,
         source: &str,
         left: &Expression,
         right: &Expression,
@@ -223,58 +236,77 @@ impl Interpreter {
             RightBrace => todo!(),
             Comma => todo!(),
             Dot => todo!(),
-            Minus => Value::Number(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    - self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            Plus => self.plus_or_concat(
-                self.evaluate_expression(source, left)?,
-                self.evaluate_expression(source, right)?,
-            )?,
+            Minus => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Number(span, left - right)
+            }
+            Plus => {
+                let left = self.evaluate_expression(source, left)?;
+                let right = self.evaluate_expression(source, right)?;
+                self.plus_or_concat(left, right)?
+            }
             Semicolon => todo!(),
-            Slash => Value::Number(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    / self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            Star => Value::Number(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    * self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
+            Slash => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Number(span, left / right)
+            }
+            Star => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Number(span, left * right)
+            }
             Bang => todo!(),
-            BangEqual => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    != self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
+            BangEqual => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left != right)
+            }
             Equal => todo!(),
-            EqualEqual => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    == self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            Greater => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    > self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            GreaterEqual => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    >= self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            Less => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    < self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
-            LessEqual => Value::Boolean(
-                span,
-                self.as_number(self.evaluate_expression(source, left)?)?
-                    < self.as_number(self.evaluate_expression(source, right)?)?,
-            ),
+            EqualEqual => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left == right)
+            }
+            Greater => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left > right)
+            }
+            GreaterEqual => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left >= right)
+            }
+            Less => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left < right)
+            }
+            LessEqual => {
+                let left = self.evaluate_expression(source, left)?;
+                let left = self.as_number(left)?;
+                let right = self.evaluate_expression(source, right)?;
+                let right = self.as_number(right)?;
+                Value::Boolean(span, left < right)
+            }
             Identifier => todo!(),
             String_ => todo!(),
             Number => todo!(),
