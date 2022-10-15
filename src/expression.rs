@@ -70,7 +70,7 @@ impl<'a> Expression<'a> {
             Expression::Super(_) => todo!(),
             Expression::This(_) => todo!(),
             Expression::Unary(_) => todo!(),
-            Expression::Variable(_) => todo!(),
+            Expression::Variable(VariableExpression { name }) => name.span,
         }
     }
 }

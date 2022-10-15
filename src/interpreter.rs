@@ -122,6 +122,13 @@ impl Interpreter {
                     self.evaluate_statement(source, else_branch)?;
                 }
             }
+            Statement::While { condition, body } => {
+                let mut condition_value = self.evaluate_expression(source, condition)?;
+                while self.is_truthy(&condition_value) {
+                    self.evaluate_statement(source, body)?;
+                    condition_value = self.evaluate_expression(source, condition)?;
+                }
+            }
         };
         Ok(())
     }

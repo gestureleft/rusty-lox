@@ -11,6 +11,10 @@ pub enum Statement<'a> {
         then_branch: Box<Statement<'a>>,
         else_branch: Option<Box<Statement<'a>>>,
     },
+    While {
+        condition: Expression<'a>,
+        body: Box<Statement<'a>>,
+    },
 }
 
 #[derive(Debug)]
