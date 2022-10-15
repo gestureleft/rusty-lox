@@ -19,10 +19,7 @@ pub fn run_repl() -> Result<(), Error> {
             let error = &parse_result.errors[0];
             error.display(&buffer);
         }
-        if let Some(expression) = parse_result.expression {
-            let value = Interpreter::interpret(&buffer, expression);
-            println!("{:?}", value);
-        }
+        Interpreter::interpret(&buffer, &parse_result.statements);
 
         if buffer == *"\n" {
             break;

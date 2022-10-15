@@ -5,6 +5,7 @@ use crate::{
     },
     lexer::{self, Token, TokenType},
     span::Span,
+    statement::Statement,
 };
 
 pub struct Parser {
@@ -14,7 +15,7 @@ pub struct Parser {
 
 pub struct ParserResult<'a> {
     pub errors: Vec<Error>,
-    pub expression: Option<Expression<'a>>,
+    pub statements: Vec<Statement<'a>>,
 }
 
 impl Parser {
@@ -23,14 +24,22 @@ impl Parser {
             current_index: 0,
             errors: vec![],
         };
-        let expression = parser.parse_expression(tokens);
-        if let Some(expression) = expression.as_ref() {
-            println!("parse() got expression: {:?}", expression.prettify(source));
+        let mut statements = vec![];
+        while let Some(token) = parser.current_token(tokens) && token.type_ != TokenType::Eof {
+            let expression = parser.parse_expression(tokens);
+            if expression.is_none() {
+                println!("Couldnt' parse expression");
+                // TODO: Synchronise parser
+                parser.synchronise(tokens);
+                continue;
+            }
+            let expression = expression.unwrap();
+            statements.push(Statement::Expression(expression));
         }
 
         ParserResult {
             errors: parser.errors,
-            expression,
+            statements,
         }
     }
 
@@ -172,6 +181,25 @@ impl Parser {
 
     fn current_token<'a>(&self, tokens: &'a [Token]) -> Option<&'a Token> {
         tokens.get(self.current_index)
+    }
+
+    pub(crate) fn synchronise(&mut self, tokens: &[Token]) {
+        self.current_index += 1;
+
+        while let Some(token) = self.current_token(tokens) {
+            let previous = tokens.get(self.current_index - 1).unwrap();
+            if previous.type_ == TokenType::Semicolon {
+                return;
+            };
+
+            use TokenType::*;
+            match token.type_ {
+                Class | Fun | Var | For | If | While | Print | Return => return,
+                _ => {}
+            };
+
+            self.current_index += 1;
+        }
     }
 }
 

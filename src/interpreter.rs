@@ -4,6 +4,7 @@ use crate::{
     },
     lexer::{Token, TokenType},
     span::Span,
+    statement::Statement,
 };
 use error::Error;
 use value::Value;
@@ -39,22 +40,30 @@ impl<'a> Interpreter<'a> {
 }
 
 impl<'a> Interpreter<'a> {
-    pub fn interpret(source: &'a str, expression: Expression<'a>) -> Result<Value, Error> {
-        Self { source }.evaluate_expression(expression)
+    pub fn interpret(source: &'a str, statements: &'a [Statement<'a>]) {
+        let interpreter = Self { source };
+        for statement in statements {
+            if let Statement::Expression(expression) = statement {
+                interpreter.evaluate_expression(expression).unwrap();
+            };
+            if let Statement::Print(expression) = statement {
+                interpreter.evaluate_expression(expression).unwrap();
+            };
+        }
     }
 
-    fn evaluate_expression(&self, expression: Expression<'a>) -> Result<Value, Error> {
+    fn evaluate_expression(&self, expression: &'a Expression<'a>) -> Result<Value, Error> {
         match expression {
             Expression::Assignment(_) => todo!(),
             Expression::Binary(BinaryExpression {
                 left,
                 right,
                 operator,
-            }) => self.evaluate_binary_expression(*left, *right, operator),
+            }) => self.evaluate_binary_expression(left, right, operator),
             Expression::Call(_) => todo!(),
             Expression::Get(_) => todo!(),
             Expression::Grouping(GroupingExpression { expression }) => {
-                self.evaluate_expression(*expression)
+                self.evaluate_expression(expression)
             }
             Expression::Literal(literal) => self.evaluate_literal(literal),
             Expression::Logical(_) => todo!(),
@@ -62,7 +71,7 @@ impl<'a> Interpreter<'a> {
             Expression::Super(_) => todo!(),
             Expression::This(_) => todo!(),
             Expression::Unary(UnaryExpression { operator, right }) => {
-                self.evaluate_unary_expression(operator, *right)
+                self.evaluate_unary_expression(operator, right)
             }
             Expression::Variable(_) => todo!(),
         }
@@ -71,7 +80,7 @@ impl<'a> Interpreter<'a> {
     fn evaluate_unary_expression(
         &self,
         operator: &'a Token,
-        right: Expression<'a>,
+        right: &'a Expression<'a>,
     ) -> Result<Value, Error> {
         use TokenType::*;
         let right = self.evaluate_expression(right)?;
@@ -118,7 +127,7 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_literal(&self, literal: LiteralExpression) -> Result<Value, Error> {
+    fn evaluate_literal(&self, literal: &'a LiteralExpression) -> Result<Value, Error> {
         Ok(match literal {
             LiteralExpression::String_(value) => Value::String(
                 Span::new(value.span.start + 1, value.span.end - 1)
@@ -133,7 +142,7 @@ impl<'a> Interpreter<'a> {
                     )
                 }))
             }
-            LiteralExpression::Boolean(value) => Value::Boolean(value),
+            LiteralExpression::Boolean(value) => Value::Boolean(*value),
             LiteralExpression::Nil => Value::Nil,
         })
     }
@@ -149,8 +158,8 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_binary_expression(
         &'a self,
-        left: Expression,
-        right: Expression,
+        left: &'a Expression,
+        right: &'a Expression,
         operator: &'a Token,
     ) -> Result<Value, Error> {
         use TokenType::*;

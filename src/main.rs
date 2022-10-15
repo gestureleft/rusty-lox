@@ -1,3 +1,5 @@
+#![feature(let_chains)]
+
 mod error;
 mod expression;
 mod interpreter;
@@ -5,6 +7,7 @@ mod lexer;
 mod parser;
 mod repl;
 mod span;
+mod statement;
 
 use std::fs;
 
@@ -47,12 +50,7 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    if parse_result.expression.is_none() {
-        return Ok(());
-    }
-
-    let expression = parse_result.expression.unwrap();
-    let value = Interpreter::interpret(&file_contents, expression);
+    let value = Interpreter::interpret(&file_contents, &parse_result.statements);
     println!("{:?}", value);
 
     Ok(())
