@@ -4,6 +4,7 @@ use crate::{
         number_literal_expression, string_literal_expression, unary_expression, Expression,
     },
     lexer::{self, Token, TokenType},
+    span::Span,
 };
 
 pub struct Parser {
@@ -133,6 +134,8 @@ impl Parser {
             {
                 self.errors.push(Error::UnexpectedToken {
                     expected_token_type: Some(TokenType::RightParen),
+                    unexpected_token_type: current_token.unwrap().type_.clone(),
+                    span: current_token.unwrap().span.clone(),
                 });
                 panic!()
             }
@@ -143,6 +146,8 @@ impl Parser {
 
         self.errors.push(Error::UnexpectedToken {
             expected_token_type: None,
+            unexpected_token_type: self.current_token(tokens).unwrap().type_.clone(),
+            span: self.current_token(tokens).unwrap().span.clone(),
         });
         None
     }
@@ -173,8 +178,9 @@ impl Parser {
 pub enum Error {
     UnexpectedToken {
         expected_token_type: Option<TokenType>,
+        unexpected_token_type: TokenType,
+        span: Span,
     },
-    Lexer(lexer::Error),
 }
 
 impl Error {
@@ -182,8 +188,13 @@ impl Error {
         match self {
             Error::UnexpectedToken {
                 expected_token_type: _,
-            } => todo!(),
-            Error::Lexer(lexer_error) => lexer_error.display(source),
+                unexpected_token_type,
+                span,
+            } => lexer::Error::display_error(
+                source,
+                span,
+                &format!("Unexpected token {:?}", unexpected_token_type),
+            ),
         }
     }
 }

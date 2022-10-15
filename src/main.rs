@@ -1,5 +1,6 @@
 mod error;
 mod expression;
+mod interpreter;
 mod lexer;
 mod parser;
 mod repl;
@@ -8,6 +9,8 @@ mod span;
 use std::fs;
 
 use error::Error;
+
+use crate::{interpreter::Interpreter, lexer::Lexer, parser::Parser};
 
 fn main() -> Result<(), Error> {
     let argc = std::env::args().count();
@@ -23,7 +26,34 @@ fn main() -> Result<(), Error> {
 
     let file_contents = load_file_from_args()?;
 
-    println!("Got file_contents: {file_contents}");
+    let lexer_result = Lexer::lex(&file_contents);
+
+    if !lexer_result.errors.is_empty() {
+        println!("Got lexing errors");
+        lexer_result
+            .errors
+            .iter()
+            .for_each(|e| e.display(&file_contents));
+        return Ok(());
+    }
+
+    let parse_result = Parser::parse(&file_contents, &lexer_result.tokens);
+
+    if !parse_result.errors.is_empty() {
+        parse_result
+            .errors
+            .iter()
+            .for_each(|e| e.display(&file_contents));
+        return Ok(());
+    }
+
+    if parse_result.expression.is_none() {
+        return Ok(());
+    }
+
+    let expression = parse_result.expression.unwrap();
+    let value = Interpreter::interpret(&file_contents, expression);
+    println!("{:?}", value);
 
     Ok(())
 }

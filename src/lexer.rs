@@ -449,14 +449,14 @@ impl Error {
         match self {
             Error::UnterminatedStringLiteral { starting_at } => Self::display_error(
                 source,
-                Span::new(
+                &Span::new(
                     *starting_at,
                     Self::index_of_first_new_line_after(source, *starting_at),
                 ),
                 "Unterminated String Literal",
             ),
             Error::UnexpectedToken { at } => {
-                Self::display_error(source, Span::new(*at, *at + 1), "Unexpected token")
+                Self::display_error(source, &Span::new(*at, *at + 1), "Unexpected token")
             }
         }
     }
@@ -472,7 +472,7 @@ impl Error {
         i
     }
 
-    fn display_error<'a>(source: &'a str, span: Span, error: &'a str) {
+    pub(crate) fn display_error<'a>(source: &'a str, span: &Span, error: &'a str) {
         let lines = Error::lines_for_error_display(source, span.start);
 
         println!("\n  \x1b[31mError:\x1b[0m {}\n", error);

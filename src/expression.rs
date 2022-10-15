@@ -88,9 +88,9 @@ pub struct AssignmentExpression<'a> {
 
 #[derive(Debug)]
 pub struct BinaryExpression<'a> {
-    left: Box<Expression<'a>>,
-    right: Box<Expression<'a>>,
-    operator: &'a Token,
+    pub left: Box<Expression<'a>>,
+    pub right: Box<Expression<'a>>,
+    pub operator: &'a Token,
 }
 
 impl<'a> BinaryExpression<'a> {
@@ -118,7 +118,7 @@ pub struct GetExpression<'a> {
 
 #[derive(Debug)]
 pub struct GroupingExpression<'a> {
-    expression: Box<Expression<'a>>,
+    pub expression: Box<Expression<'a>>,
 }
 
 #[derive(Debug)]
@@ -173,8 +173,8 @@ pub struct ThisExpression<'a> {
 
 #[derive(Debug)]
 pub struct UnaryExpression<'a> {
-    operator: &'a Token,
-    right: Box<Expression<'a>>,
+    pub operator: &'a Token,
+    pub right: Box<Expression<'a>>,
 }
 
 impl<'a> UnaryExpression<'a> {

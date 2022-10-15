@@ -1,3 +1,5 @@
+use std::cmp::{max, min};
+
 #[derive(Debug, Clone)]
 pub struct Span {
     pub start: usize,
@@ -11,5 +13,9 @@ impl Span {
 
     pub fn slice<'a>(&self, source: &'a str) -> &'a str {
         &source[self.start..self.end]
+    }
+
+    pub fn combine(self, other: Span) -> Span {
+        Self::new(min(self.start, other.start), max(self.end, other.end))
     }
 }

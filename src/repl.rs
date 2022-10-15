@@ -1,6 +1,7 @@
 use std::io::{self, stdout, Write};
 
 use crate::error::Error;
+use crate::interpreter::Interpreter;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 
@@ -17,6 +18,10 @@ pub fn run_repl() -> Result<(), Error> {
         if !parse_result.errors.is_empty() {
             let error = &parse_result.errors[0];
             error.display(&buffer);
+        }
+        if let Some(expression) = parse_result.expression {
+            let value = Interpreter::interpret(&buffer, expression);
+            println!("{:?}", value);
         }
 
         if buffer == *"\n" {
