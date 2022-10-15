@@ -1,6 +1,6 @@
 use crate::span::Span;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Value {
     String(Span, String),
     Number(Span, f64),

@@ -1,20 +1,25 @@
 use crate::{
     expression::{
         BinaryExpression, Expression, GroupingExpression, LiteralExpression, UnaryExpression,
+        VariableExpression,
     },
     lexer::{Token, TokenType},
     span::Span,
-    statement::Statement,
+    statement::{Statement, VariableDeclaration},
 };
 use error::Error;
 use value::Value;
 
+use self::environment::Environment;
+
+mod environment;
 mod error;
 mod value;
 
 #[derive(Debug)]
 pub struct Interpreter<'a> {
     source: &'a str,
+    environment: Environment<'a>,
 }
 
 impl<'a> Interpreter<'a> {
@@ -46,19 +51,47 @@ impl<'a> Interpreter<'a> {
         source: &'a str,
         statements: &'a [Statement<'a>],
     ) -> Result<Vec<Value>, Error> {
-        let interpreter = Self { source };
-        let mut values = vec![];
-        for statement in statements {
-            if let Statement::Expression(expression) = statement {
-                values.push(interpreter.evaluate_expression(expression)?);
-            };
-            if let Statement::Print(expression) = statement {
-                let result = interpreter.evaluate_expression(expression)?;
-                result.pretty_print();
-                values.push(result);
-            };
+        Self {
+            source,
+            environment: Environment::new(),
         }
-        Ok(values)
+        .evaluate_statements(source, statements)
+    }
+
+    fn evaluate_statements(
+        &mut self,
+        source: &'a str,
+        statements: &'a [Statement<'a>],
+    ) -> Result<Vec<Value>, Error> {
+        statements
+            .iter()
+            .map(|statement| self.evaluate_statement(source, statement))
+            .collect::<Result<_, _>>()
+    }
+
+    fn evaluate_statement(
+        &mut self,
+        source: &'a str,
+        statement: &'a Statement,
+    ) -> Result<Value, Error> {
+        match statement {
+            Statement::Print(expression) => {
+                let result = self.evaluate_expression(expression)?;
+                result.pretty_print();
+                Ok(result)
+            }
+            Statement::Expression(expression) => self.evaluate_expression(expression),
+            Statement::VariableDeclaration(VariableDeclaration { name, initialiser }) => {
+                let value = if let Some(initialiser) = initialiser {
+                    self.evaluate_expression(initialiser)?
+                } else {
+                    Value::Nil(name.span)
+                };
+                self.environment
+                    .define(name.span.slice(source), value.clone());
+                Ok(value)
+            }
+        }
     }
 
     fn evaluate_expression(&self, expression: &'a Expression<'a>) -> Result<Value, Error> {
@@ -82,7 +115,12 @@ impl<'a> Interpreter<'a> {
             Expression::Unary(UnaryExpression { operator, right }) => {
                 self.evaluate_unary_expression(operator, right)
             }
-            Expression::Variable(_) => todo!(),
+            Expression::Variable(VariableExpression { name }) => {
+                let token = *name;
+                self.environment
+                    .get(self.source, token)
+                    .ok_or(Error::VariableDoesntExist(token.clone()))
+            }
         }
     }
 

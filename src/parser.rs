@@ -1,11 +1,12 @@
 use crate::{
     expression::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
-        number_literal_expression, string_literal_expression, unary_expression, Expression,
+        number_literal_expression, string_literal_expression, unary_expression,
+        AssignmentExpression, Expression, VariableExpression,
     },
     lexer::{self, Token, TokenType},
     span::Span,
-    statement::Statement,
+    statement::{Statement, VariableDeclaration},
 };
 
 pub struct Parser {
@@ -26,7 +27,7 @@ impl Parser {
         };
         let mut statements = vec![];
         while let Some(token) = parser.current_token(tokens) && token.type_ != TokenType::Eof {
-            let statement = parser.parse_statement(tokens);
+            let statement = parser.parse_declaration(tokens);
             if statement.is_none() {
                 parser.synchronise(tokens);
                 continue;
@@ -38,6 +39,30 @@ impl Parser {
             errors: parser.errors,
             statements,
         }
+    }
+
+    fn parse_declaration<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Var]) {
+            return self.parse_variable_declaration(tokens);
+        };
+
+        self.parse_statement(tokens)
+    }
+
+    fn parse_variable_declaration<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        let name = self
+            .consume_token_of_type(tokens, TokenType::Identifier)?
+            .clone();
+        let initialiser = if self.consume_token_if_in_vec(tokens, &vec![TokenType::Equal]) {
+            self.parse_expression(tokens)
+        } else {
+            None
+        };
+        self.consume_token_of_type(tokens, TokenType::Semicolon)?;
+        Some(Statement::VariableDeclaration(VariableDeclaration {
+            name,
+            initialiser,
+        }))
     }
 
     fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
@@ -61,7 +86,28 @@ impl Parser {
     }
 
     fn parse_expression<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
-        self.parse_equality(tokens)
+        self.parse_assignment(tokens)
+    }
+
+    fn parse_assignment<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+        let expression = self.parse_equality(tokens)?;
+
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Equal]) {
+            let value = self.parse_assignment(tokens)?;
+
+            if let Expression::Variable(variable_expression) = expression {
+                return Some(Expression::Assignment(AssignmentExpression {
+                    name: variable_expression.name,
+                    value: Box::new(value),
+                }));
+            };
+
+            self.errors.push(Error::InvalidAssignmentTarget {
+                target_span: expression.span(),
+            });
+        };
+
+        Some(expression)
     }
 
     fn parse_equality<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
@@ -155,6 +201,11 @@ impl Parser {
                 tokens.get(self.current_index - 1).unwrap(),
             ));
         };
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Identifier]) {
+            return Some(Expression::Variable(VariableExpression {
+                name: tokens.get(self.current_index - 1).unwrap(),
+            }));
+        }
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen]) {
             let expression = self.parse_expression(tokens)?;
             let current_token = self.current_token(tokens);
@@ -164,7 +215,7 @@ impl Parser {
                 self.errors.push(Error::UnexpectedToken {
                     expected_token_type: Some(TokenType::RightParen),
                     unexpected_token_type: current_token.unwrap().type_.clone(),
-                    span: current_token.unwrap().span.clone(),
+                    span: current_token.unwrap().span,
                 });
                 return None;
             }
@@ -176,12 +227,16 @@ impl Parser {
         self.errors.push(Error::UnexpectedToken {
             expected_token_type: None,
             unexpected_token_type: self.current_token(tokens).unwrap().type_.clone(),
-            span: self.current_token(tokens).unwrap().span.clone(),
+            span: self.current_token(tokens).unwrap().span,
         });
         None
     }
 
-    fn consume_token_of_type(&mut self, tokens: &[Token], token_type: TokenType) -> Option<()> {
+    fn consume_token_of_type<'a>(
+        &'a mut self,
+        tokens: &'a [Token],
+        token_type: TokenType,
+    ) -> Option<&'a Token> {
         let current_token = self.current_token(tokens);
         if current_token.is_none() {
             self.errors.push(Error::UnexpectedEof);
@@ -201,7 +256,7 @@ impl Parser {
             return None;
         };
         self.current_index += 1;
-        Some(())
+        Some(current_token)
     }
 
     /// If the current token's type is in the given list, consume it and return true.
@@ -253,6 +308,9 @@ pub enum Error {
         span: Span,
     },
     UnexpectedEof,
+    InvalidAssignmentTarget {
+        target_span: Span,
+    },
 }
 
 impl Error {
@@ -276,6 +334,9 @@ impl Error {
                 }
             }
             Error::UnexpectedEof => todo!(),
+            Error::InvalidAssignmentTarget { target_span } => {
+                lexer::Error::display_error(source, target_span, "Invalid assignment target")
+            }
         }
     }
 }

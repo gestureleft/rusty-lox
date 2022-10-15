@@ -1,8 +1,12 @@
-use crate::{lexer, span::Span};
+use crate::{
+    lexer::{self, Token},
+    span::Span,
+};
 
 #[derive(Debug)]
 pub enum Error {
     Type(TypeError),
+    VariableDoesntExist(Token),
 }
 
 #[derive(Debug)]
@@ -34,6 +38,9 @@ impl Error {
                 source_token_span,
                 &format!("Type Error: expected {}, got {}", expected, got),
             ),
+            Error::VariableDoesntExist(token) => {
+                lexer::Error::display_error(source, &token.span, "Variable doesn't exist")
+            }
         }
     }
 }

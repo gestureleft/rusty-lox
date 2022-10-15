@@ -111,8 +111,8 @@ pub fn grouping_expression<'a>(expression: Expression<'a>) -> Expression<'a> {
 
 #[derive(Debug)]
 pub struct AssignmentExpression<'a> {
-    name: &'a Token,
-    value: Box<Expression<'a>>,
+    pub name: &'a Token,
+    pub value: Box<Expression<'a>>,
 }
 
 #[derive(Debug)]
@@ -226,5 +226,5 @@ impl<'a> UnaryExpression<'a> {
 
 #[derive(Debug)]
 pub struct VariableExpression<'a> {
-    name: &'a Token,
+    pub name: &'a Token,
 }
