@@ -66,17 +66,80 @@ impl Parser {
     }
 
     fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        // If statement
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::If]) {
-            self.parse_if_statement(tokens)
-        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::While]) {
-            self.parse_while_statement(tokens)
-        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
-            self.parse_print_statement(tokens)
-        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
-            Some(Statement::Block(self.parse_block(tokens)?))
+            return self.parse_if_statement(tokens);
+        };
+        // While statement
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::While]) {
+            return self.parse_while_statement(tokens);
+        };
+        // For statement
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::For]) {
+            return self.parse_for_statement(tokens);
+        };
+        // Print statement
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
+            return self.parse_print_statement(tokens);
+        };
+        // Block statement
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
+            return Some(Statement::Block(self.parse_block(tokens)?));
+        };
+
+        // Expression statement
+        self.parse_expression_statement(tokens)
+    }
+
+    fn parse_for_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        self.consume_token_of_type(tokens, TokenType::LeftParen)?;
+        let initialiser = if self.consume_token_if_in_vec(tokens, &vec![TokenType::Semicolon]) {
+            None
+        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::Var]) {
+            self.parse_variable_declaration(tokens)
         } else {
             self.parse_expression_statement(tokens)
-        }
+        };
+
+        // FIXME: Remove the unwrap
+        let condition = if self.current_token(tokens).unwrap().type_ != TokenType::Semicolon {
+            self.parse_expression(tokens)
+        } else {
+            None
+        };
+
+        self.consume_token_of_type(tokens, TokenType::Semicolon);
+
+        // FIXME: Remove the unwrap
+        let increment = if self.current_token(tokens).unwrap().type_ != TokenType::RightParen {
+            self.parse_expression(tokens)
+        } else {
+            None
+        };
+
+        self.consume_token_of_type(tokens, TokenType::RightParen);
+
+        let body = {
+            let mut body = self.parse_statement(tokens)?;
+
+            if let Some(increment) = increment {
+                body = Statement::Block(vec![body, Statement::Expression(increment)]);
+            }
+
+            if let Some(condition) = condition {
+                body = Statement::While {
+                    condition,
+                    body: Box::new(body),
+                };
+            }
+
+            if let Some(initialiser) = initialiser {
+                body = Statement::Block(vec![initialiser, body]);
+            }
+            body
+        };
+
+        Some(body)
     }
 
     fn parse_while_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
