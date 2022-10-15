@@ -5,6 +5,7 @@ pub enum Statement<'a> {
     Print(Expression<'a>),
     Expression(Expression<'a>),
     VariableDeclaration(VariableDeclaration<'a>),
+    Block(Vec<Statement<'a>>),
 }
 
 #[derive(Debug)]

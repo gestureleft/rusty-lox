@@ -89,6 +89,10 @@ impl Interpreter {
                     .define(name.span.slice(source).to_string(), value.clone());
                 Ok(value)
             }
+            Statement::Block(statements) => {
+                self.evaluate_statements(source, statements)?;
+                Ok(Value::Nil(Span::new(0, 0)))
+            }
         }
     }
 

@@ -68,9 +68,22 @@ impl Parser {
     fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
             self.print_statement(tokens)
+        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
+            Some(Statement::Block(self.parse_block(tokens)?))
         } else {
             self.expression_statement(tokens)
         }
+    }
+
+    fn parse_block<'a>(&mut self, tokens: &'a [Token]) -> Option<Vec<Statement<'a>>> {
+        let mut statements = vec![];
+        while self.current_token(tokens).map(|t| &t.type_) != Some(&TokenType::RightBrace)
+            && self.current_token(tokens).is_some()
+        {
+            statements.push(self.parse_declaration(tokens)?);
+        }
+        self.consume_token_of_type(tokens, TokenType::RightBrace)?;
+        Some(statements)
     }
 
     fn print_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
