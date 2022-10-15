@@ -20,7 +20,7 @@ pub struct ParserResult<'a> {
 }
 
 impl Parser {
-    pub fn parse<'a>(source: &'a str, tokens: &'a [Token]) -> ParserResult<'a> {
+    pub fn parse<'a>(tokens: &'a [Token]) -> ParserResult<'a> {
         let mut parser = Parser {
             current_index: 0,
             errors: vec![],

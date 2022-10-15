@@ -17,12 +17,11 @@ mod error;
 mod value;
 
 #[derive(Debug)]
-pub struct Interpreter<'a> {
-    source: &'a str,
-    environment: Environment<'a>,
+pub struct Interpreter {
+    environment: Environment,
 }
 
-impl<'a> Interpreter<'a> {
+impl Interpreter {
     fn as_number(&self, value: Value) -> Result<f64, Error> {
         if let Value::Number(_, value) = value {
             return Ok(value);
@@ -46,22 +45,25 @@ impl<'a> Interpreter<'a> {
     }
 }
 
-impl<'a> Interpreter<'a> {
-    pub fn interpret(
-        source: &'a str,
-        statements: &'a [Statement<'a>],
-    ) -> Result<Vec<Value>, Error> {
+impl Interpreter {
+    pub fn new() -> Self {
         Self {
-            source,
             environment: Environment::new(),
         }
-        .evaluate_statements(source, statements)
+    }
+
+    pub fn interpret(
+        &mut self,
+        source: &str,
+        statements: Vec<Statement>,
+    ) -> Result<Vec<Value>, Error> {
+        self.evaluate_statements(source, &statements)
     }
 
     fn evaluate_statements(
         &mut self,
-        source: &'a str,
-        statements: &'a [Statement<'a>],
+        source: &str,
+        statements: &[Statement],
     ) -> Result<Vec<Value>, Error> {
         statements
             .iter()
@@ -69,56 +71,52 @@ impl<'a> Interpreter<'a> {
             .collect::<Result<_, _>>()
     }
 
-    fn evaluate_statement(
-        &mut self,
-        source: &'a str,
-        statement: &'a Statement,
-    ) -> Result<Value, Error> {
+    fn evaluate_statement(&mut self, source: &str, statement: &Statement) -> Result<Value, Error> {
         match statement {
             Statement::Print(expression) => {
-                let result = self.evaluate_expression(expression)?;
+                let result = self.evaluate_expression(source, expression)?;
                 result.pretty_print();
                 Ok(result)
             }
-            Statement::Expression(expression) => self.evaluate_expression(expression),
+            Statement::Expression(expression) => self.evaluate_expression(source, expression),
             Statement::VariableDeclaration(VariableDeclaration { name, initialiser }) => {
                 let value = if let Some(initialiser) = initialiser {
-                    self.evaluate_expression(initialiser)?
+                    self.evaluate_expression(source, initialiser)?
                 } else {
                     Value::Nil(name.span)
                 };
                 self.environment
-                    .define(name.span.slice(source), value.clone());
+                    .define(name.span.slice(source).to_string(), value.clone());
                 Ok(value)
             }
         }
     }
 
-    fn evaluate_expression(&self, expression: &'a Expression<'a>) -> Result<Value, Error> {
+    fn evaluate_expression(&self, source: &str, expression: &Expression) -> Result<Value, Error> {
         match expression {
             Expression::Assignment(_) => todo!(),
             Expression::Binary(BinaryExpression {
                 left,
                 right,
                 operator,
-            }) => self.evaluate_binary_expression(left, right, operator),
+            }) => self.evaluate_binary_expression(source, left, right, operator),
             Expression::Call(_) => todo!(),
             Expression::Get(_) => todo!(),
             Expression::Grouping(GroupingExpression { expression }) => {
-                self.evaluate_expression(expression)
+                self.evaluate_expression(source, expression)
             }
-            Expression::Literal(literal) => self.evaluate_literal(literal),
+            Expression::Literal(literal) => self.evaluate_literal(source, literal),
             Expression::Logical(_) => todo!(),
             Expression::Set(_) => todo!(),
             Expression::Super(_) => todo!(),
             Expression::This(_) => todo!(),
             Expression::Unary(UnaryExpression { operator, right }) => {
-                self.evaluate_unary_expression(operator, right)
+                self.evaluate_unary_expression(source, operator, right)
             }
             Expression::Variable(VariableExpression { name }) => {
                 let token = *name;
                 self.environment
-                    .get(self.source, token)
+                    .get(source, token)
                     .ok_or(Error::VariableDoesntExist(token.clone()))
             }
         }
@@ -126,11 +124,12 @@ impl<'a> Interpreter<'a> {
 
     fn evaluate_unary_expression(
         &self,
-        operator: &'a Token,
-        right: &'a Expression<'a>,
+        source: &str,
+        operator: &Token,
+        right: &Expression,
     ) -> Result<Value, Error> {
         use TokenType::*;
-        let right = self.evaluate_expression(right)?;
+        let right = self.evaluate_expression(source, right)?;
         match operator.type_ {
             LeftParen => todo!(),
             RightParen => todo!(),
@@ -180,25 +179,22 @@ impl<'a> Interpreter<'a> {
         }
     }
 
-    fn evaluate_literal(&self, literal: &'a LiteralExpression) -> Result<Value, Error> {
+    fn evaluate_literal(&self, source: &str, literal: &LiteralExpression) -> Result<Value, Error> {
         Ok(match literal {
             LiteralExpression::String_(value) => Value::String(
                 value.span,
                 Span::new(value.span.start + 1, value.span.end - 1)
-                    .slice(self.source)
+                    .slice(source)
                     .to_owned(),
             ),
             LiteralExpression::Number(value) => Value::Number(
                 value.span,
-                value.span.slice(self.source).parse().unwrap_or_else(|_| {
-                    panic!(
-                        "Couldn't parse number literal {}",
-                        value.span.slice(self.source)
-                    )
+                value.span.slice(source).parse().unwrap_or_else(|_| {
+                    panic!("Couldn't parse number literal {}", value.span.slice(source))
                 }),
             ),
-            LiteralExpression::Boolean(span, value) => Value::Boolean(span.clone(), *value),
-            LiteralExpression::Nil(span) => Value::Nil(span.clone()),
+            LiteralExpression::Boolean(span, value) => Value::Boolean(*span, *value),
+            LiteralExpression::Nil(span) => Value::Nil(*span),
         })
     }
 
@@ -212,10 +208,11 @@ impl<'a> Interpreter<'a> {
     }
 
     fn evaluate_binary_expression(
-        &'a self,
-        left: &'a Expression,
-        right: &'a Expression,
-        operator: &'a Token,
+        &self,
+        source: &str,
+        left: &Expression,
+        right: &Expression,
+        operator: &Token,
     ) -> Result<Value, Error> {
         use TokenType::*;
         let span = left.span().combine(operator.span).combine(right.span());
@@ -228,55 +225,55 @@ impl<'a> Interpreter<'a> {
             Dot => todo!(),
             Minus => Value::Number(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    - self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    - self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Plus => self.plus_or_concat(
-                self.evaluate_expression(left)?,
-                self.evaluate_expression(right)?,
+                self.evaluate_expression(source, left)?,
+                self.evaluate_expression(source, right)?,
             )?,
             Semicolon => todo!(),
             Slash => Value::Number(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    / self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    / self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Star => Value::Number(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    * self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    * self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Bang => todo!(),
             BangEqual => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    != self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    != self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Equal => todo!(),
             EqualEqual => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    == self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    == self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Greater => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    > self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    > self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             GreaterEqual => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    >= self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    >= self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Less => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    < self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    < self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             LessEqual => Value::Boolean(
                 span,
-                self.as_number(self.evaluate_expression(left)?)?
-                    < self.as_number(self.evaluate_expression(right)?)?,
+                self.as_number(self.evaluate_expression(source, left)?)?
+                    < self.as_number(self.evaluate_expression(source, right)?)?,
             ),
             Identifier => todo!(),
             String_ => todo!(),

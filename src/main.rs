@@ -40,7 +40,7 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let parse_result = Parser::parse(&file_contents, &lexer_result.tokens);
+    let parse_result = Parser::parse(&lexer_result.tokens);
 
     if !parse_result.errors.is_empty() {
         parse_result
@@ -50,7 +50,7 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let result = Interpreter::interpret(&file_contents, &parse_result.statements);
+    let result = Interpreter::new().interpret(&file_contents, parse_result.statements);
 
     if let Err(error) = result {
         error.display(&file_contents);
