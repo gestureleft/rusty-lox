@@ -18,7 +18,7 @@ mod value;
 
 #[derive(Debug)]
 pub struct Interpreter {
-    environment: Environment<'static>,
+    environment_stack: Vec<Environment>,
 }
 
 impl Interpreter {
@@ -48,8 +48,33 @@ impl Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         Self {
-            environment: Environment::new(),
+            environment_stack: vec![Environment::new()],
         }
+    }
+
+    fn current_scope(&mut self) -> &mut Environment {
+        self.environment_stack.last_mut().unwrap()
+    }
+
+    fn assign(&mut self, name: String, new_value: Value) -> Result<(), ()> {
+        for environment in self.environment_stack.iter_mut().rev() {
+            let result = environment.assign(&name, &new_value);
+
+            if result.is_ok() {
+                return result;
+            };
+        }
+        Err(())
+    }
+
+    fn get(&mut self, source: &str, token: &Token) -> Option<Value> {
+        for environment in self.environment_stack.iter_mut().rev() {
+            let result = environment.get(source, token);
+            if result.is_some() {
+                return result;
+            };
+        }
+        None
     }
 
     pub fn interpret(
@@ -85,12 +110,14 @@ impl Interpreter {
                 } else {
                     Value::Nil(name.span)
                 };
-                self.environment
+                self.current_scope()
                     .define(name.span.slice(source).to_string(), value.clone());
                 Ok(value)
             }
             Statement::Block(statements) => {
+                self.environment_stack.push(Environment::new());
                 self.evaluate_statements(source, statements)?;
+                self.environment_stack.pop();
                 Ok(Value::Nil(Span::new(0, 0)))
             }
         }
@@ -104,9 +131,7 @@ impl Interpreter {
         match expression {
             Expression::Assignment(AssignmentExpression { name, value }) => {
                 let value = self.evaluate_expression(source, value)?;
-                let did_assign = self
-                    .environment
-                    .assign(name.span.slice(source).to_string(), value.clone());
+                let did_assign = self.assign(name.span.slice(source).to_string(), value.clone());
                 if did_assign.is_ok() {
                     return Ok(value);
                 };
@@ -132,8 +157,7 @@ impl Interpreter {
             }
             Expression::Variable(VariableExpression { name }) => {
                 let token = *name;
-                self.environment
-                    .get(source, token)
+                self.get(source, token)
                     .ok_or(Error::VariableDoesntExist(token.clone()))
             }
         }
