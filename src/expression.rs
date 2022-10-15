@@ -186,9 +186,9 @@ impl<'a> LiteralExpression<'a> {
 
 #[derive(Debug)]
 pub struct LogicalExpression<'a> {
-    left: Box<Expression<'a>>,
-    right: Box<Expression<'a>>,
-    operator: &'a Token,
+    pub left: Box<Expression<'a>>,
+    pub right: Box<Expression<'a>>,
+    pub operator: &'a Token,
 }
 
 #[derive(Debug)]

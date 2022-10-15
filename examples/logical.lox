@@ -1,0 +1,7 @@
+
+print("hi" or 2);
+print(nil or "yes");
+
+print(nil and "bye");
+print("no" and 2);
+

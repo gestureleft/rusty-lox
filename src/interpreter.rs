@@ -1,7 +1,7 @@
 use crate::{
     expression::{
         AssignmentExpression, BinaryExpression, Expression, GroupingExpression, LiteralExpression,
-        UnaryExpression, VariableExpression,
+        LogicalExpression, UnaryExpression, VariableExpression,
     },
     lexer::{Token, TokenType},
     span::Span,
@@ -116,7 +116,7 @@ impl Interpreter {
                 else_branch,
             } => {
                 let condition = self.evaluate_expression(source, condition)?;
-                if self.is_truthy(condition) {
+                if self.is_truthy(&condition) {
                     self.evaluate_statement(source, then_branch)?;
                 } else if let Some(else_branch) = else_branch {
                     self.evaluate_statement(source, else_branch)?;
@@ -151,7 +151,20 @@ impl Interpreter {
                 self.evaluate_expression(source, expression)
             }
             Expression::Literal(literal) => self.evaluate_literal(source, literal),
-            Expression::Logical(_) => todo!(),
+            Expression::Logical(LogicalExpression {
+                left,
+                right,
+                operator,
+            }) => {
+                let left = self.evaluate_expression(source, left)?;
+                if operator.type_ == TokenType::Or && self.is_truthy(&left) {
+                    return Ok(left);
+                }
+                if operator.type_ == TokenType::And && !self.is_truthy(&left) {
+                    return Ok(left);
+                }
+                self.evaluate_expression(source, right)
+            }
             Expression::Set(_) => todo!(),
             Expression::Super(_) => todo!(),
             Expression::This(_) => todo!(),
@@ -191,7 +204,7 @@ impl Interpreter {
             Star => todo!(),
             Bang => Ok(Value::Boolean(
                 operator.span.combine(right.span()),
-                !self.is_truthy(right),
+                !self.is_truthy(&right),
             )),
             BangEqual => todo!(),
             Equal => todo!(),
@@ -242,10 +255,10 @@ impl Interpreter {
         })
     }
 
-    fn is_truthy(&self, value: Value) -> bool {
-        match value {
-            Value::String(_, _) => todo!(),
-            Value::Number(_, _) => todo!(),
+    fn is_truthy(&self, value: &Value) -> bool {
+        match *value {
+            Value::String(_, _) => true,
+            Value::Number(_, _) => true,
             Value::Boolean(_, value) => value,
             Value::Nil(_) => false,
         }

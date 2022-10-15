@@ -2,7 +2,7 @@ use crate::{
     expression::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
         number_literal_expression, string_literal_expression, unary_expression,
-        AssignmentExpression, Expression, VariableExpression,
+        AssignmentExpression, Expression, LogicalExpression, VariableExpression,
     },
     lexer::{self, Token, TokenType},
     span::Span,
@@ -73,7 +73,7 @@ impl Parser {
         } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
             Some(Statement::Block(self.parse_block(tokens)?))
         } else {
-            self.expression_statement(tokens)
+            self.parse_expression_statement(tokens)
         }
     }
 
@@ -113,7 +113,7 @@ impl Parser {
         Some(Statement::Print(expression))
     }
 
-    fn expression_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_expression_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
         let expression = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::Semicolon)?;
         Some(Statement::Expression(expression))
@@ -124,7 +124,7 @@ impl Parser {
     }
 
     fn parse_assignment<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
-        let expression = self.parse_equality(tokens)?;
+        let expression = self.parse_or(tokens)?;
 
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Equal]) {
             let value = self.parse_assignment(tokens)?;
@@ -140,6 +140,38 @@ impl Parser {
                 target_span: expression.span(),
             });
         };
+
+        Some(expression)
+    }
+
+    fn parse_or<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+        let mut expression = self.parse_and(tokens)?;
+
+        while self.consume_token_if_in_vec(tokens, &vec![TokenType::Or]) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = Box::new(self.parse_and(tokens)?);
+            expression = Expression::Logical(LogicalExpression {
+                left: Box::new(expression),
+                right,
+                operator,
+            })
+        }
+
+        Some(expression)
+    }
+
+    fn parse_and<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+        let mut expression = self.parse_equality(tokens)?;
+
+        while self.consume_token_if_in_vec(tokens, &vec![TokenType::And]) {
+            let operator = tokens.get(self.current_index - 1).unwrap();
+            let right = Box::new(self.parse_equality(tokens)?);
+            expression = Expression::Logical(LogicalExpression {
+                left: Box::new(expression),
+                right,
+                operator,
+            });
+        }
 
         Some(expression)
     }
