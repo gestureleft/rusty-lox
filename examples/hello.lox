@@ -1,4 +1,4 @@
-2 < "hi"
-print("Hello")
-3 < 2
+print("Hello World!");
+print("Is 10 less then 3?");
+print(10 < 3);
 

@@ -26,19 +26,38 @@ impl Parser {
         };
         let mut statements = vec![];
         while let Some(token) = parser.current_token(tokens) && token.type_ != TokenType::Eof {
-            let expression = parser.parse_expression(tokens);
-            if expression.is_none() {
+            let statement = parser.parse_statement(tokens);
+            if statement.is_none() {
                 parser.synchronise(tokens);
                 continue;
             }
-            let expression = expression.unwrap();
-            statements.push(Statement::Expression(expression));
+            statements.push(statement.unwrap());
         }
 
         ParserResult {
             errors: parser.errors,
             statements,
         }
+    }
+
+    fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
+            self.print_statement(tokens)
+        } else {
+            self.expression_statement(tokens)
+        }
+    }
+
+    fn print_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        let expression = self.parse_expression(tokens)?;
+        self.consume_token_of_type(tokens, TokenType::Semicolon)?;
+        Some(Statement::Print(expression))
+    }
+
+    fn expression_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        let expression = self.parse_expression(tokens)?;
+        self.consume_token_of_type(tokens, TokenType::Semicolon)?;
+        Some(Statement::Expression(expression))
     }
 
     fn parse_expression<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
@@ -147,7 +166,7 @@ impl Parser {
                     unexpected_token_type: current_token.unwrap().type_.clone(),
                     span: current_token.unwrap().span.clone(),
                 });
-                panic!()
+                return None;
             }
 
             self.current_index += 1;
@@ -160,6 +179,29 @@ impl Parser {
             span: self.current_token(tokens).unwrap().span.clone(),
         });
         None
+    }
+
+    fn consume_token_of_type(&mut self, tokens: &[Token], token_type: TokenType) -> Option<()> {
+        let current_token = self.current_token(tokens);
+        if current_token.is_none() {
+            self.errors.push(Error::UnexpectedEof);
+            return None;
+        };
+        let current_token = current_token.unwrap();
+        if current_token.type_ != token_type {
+            println!(
+                "Tryed to consume token of type {:?}, but got {:?} instead",
+                token_type, current_token
+            );
+            self.errors.push(Error::UnexpectedToken {
+                expected_token_type: Some(token_type),
+                unexpected_token_type: current_token.type_.clone(),
+                span: current_token.span,
+            });
+            return None;
+        };
+        self.current_index += 1;
+        Some(())
     }
 
     /// If the current token's type is in the given list, consume it and return true.
@@ -210,20 +252,30 @@ pub enum Error {
         unexpected_token_type: TokenType,
         span: Span,
     },
+    UnexpectedEof,
 }
 
 impl Error {
     pub fn display(&self, source: &str) {
         match self {
             Error::UnexpectedToken {
-                expected_token_type: _,
+                expected_token_type,
                 unexpected_token_type,
                 span,
-            } => lexer::Error::display_error(
-                source,
-                span,
-                &format!("Unexpected token {:?}", unexpected_token_type),
-            ),
+            } => {
+                lexer::Error::display_error(
+                    source,
+                    span,
+                    &format!("Unexpected token {:?}", unexpected_token_type),
+                );
+                if let Some(expected_token_type) = expected_token_type {
+                    println!(
+                        "  Info: \x1b[34mExpected token of type: {:?}\x1b[0m",
+                        expected_token_type
+                    );
+                }
+            }
+            Error::UnexpectedEof => todo!(),
         }
     }
 }

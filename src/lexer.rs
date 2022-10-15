@@ -405,7 +405,6 @@ struct LinesForErrorDisplay {
 
 impl Error {
     fn lines_for_error_display(source: &str, error_starts_at: usize) -> LinesForErrorDisplay {
-        assert!(error_starts_at < source.len());
         // Index into the source the start of the current line
         let mut previous_line_start = 0;
         let mut current_line_start = 0;

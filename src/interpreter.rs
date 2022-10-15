@@ -9,8 +9,6 @@ use crate::{
 use error::Error;
 use value::Value;
 
-use self::error::TypeError;
-
 mod error;
 mod value;
 
@@ -55,7 +53,9 @@ impl<'a> Interpreter<'a> {
                 values.push(interpreter.evaluate_expression(expression)?);
             };
             if let Statement::Print(expression) = statement {
-                values.push(interpreter.evaluate_expression(expression)?);
+                let result = interpreter.evaluate_expression(expression)?;
+                result.pretty_print();
+                values.push(result);
             };
         }
         Ok(values)
