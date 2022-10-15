@@ -101,8 +101,8 @@ impl Parser {
             self.parse_expression_statement(tokens)
         };
 
-        // FIXME: Remove the unwrap
-        let condition = if self.current_token(tokens).unwrap().type_ != TokenType::Semicolon {
+        let current_token = self.current_token(tokens)?;
+        let condition = if current_token.type_ != TokenType::Semicolon {
             self.parse_expression(tokens)
         } else {
             None
@@ -110,8 +110,8 @@ impl Parser {
 
         self.consume_token_of_type(tokens, TokenType::Semicolon);
 
-        // FIXME: Remove the unwrap
-        let increment = if self.current_token(tokens).unwrap().type_ != TokenType::RightParen {
+        let current_token = self.current_token(tokens)?;
+        let increment = if current_token.type_ != TokenType::RightParen {
             self.parse_expression(tokens)
         } else {
             None
