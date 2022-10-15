@@ -1,6 +1,11 @@
 var hello = "Hello World!";
 
 print(hello);
+
+{
+  print(hello);
+}
+
 print("Is 10 less then 3?");
 print(10 < 3);
 

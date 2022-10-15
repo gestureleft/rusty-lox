@@ -18,7 +18,7 @@ mod value;
 
 #[derive(Debug)]
 pub struct Interpreter {
-    environment: Environment,
+    environment: Environment<'static>,
 }
 
 impl Interpreter {

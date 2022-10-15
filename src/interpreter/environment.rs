@@ -5,14 +5,16 @@ use crate::lexer::Token;
 use super::value::Value;
 
 #[derive(Debug)]
-pub struct Environment {
+pub struct Environment<'a> {
+    enclosing_environment: Option<&'a mut Environment<'a>>,
     values: HashMap<String, Value>,
 }
 
-impl Environment {
+impl<'a> Environment<'a> {
     pub(crate) fn new() -> Self {
         Self {
             values: HashMap::new(),
+            enclosing_environment: None,
         }
     }
     pub(crate) fn define(&mut self, name: String, value: Value) {
@@ -20,7 +22,17 @@ impl Environment {
     }
 
     pub(crate) fn get(&self, source: &str, token: &Token) -> Option<Value> {
-        self.values.get(token.span.slice(source)).cloned()
+        let value = self.values.get(token.span.slice(source)).cloned();
+        if value.is_some() {
+            return value;
+        };
+
+        // Search enclosing scope
+        if let Some(enclosing_environment) = &self.enclosing_environment {
+            return enclosing_environment.get(source, token);
+        };
+
+        None
     }
 
     pub(crate) fn assign(&mut self, name: String, new_value: Value) -> Result<(), ()> {
@@ -29,6 +41,11 @@ impl Environment {
             *value = new_value;
             return Ok(());
         };
+
+        if let Some(enclosing_environment) = &mut self.enclosing_environment {
+            return enclosing_environment.assign(name, new_value);
+        }
+
         Err(())
     }
 }
