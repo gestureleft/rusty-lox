@@ -9,6 +9,8 @@ use crate::{
 use error::Error;
 use value::Value;
 
+use self::error::TypeError;
+
 mod error;
 mod value;
 
@@ -19,37 +21,44 @@ pub struct Interpreter<'a> {
 
 impl<'a> Interpreter<'a> {
     fn as_number(&self, value: Value) -> Result<f64, Error> {
-        if let Value::Number(value) = value {
+        if let Value::Number(_, value) = value {
             return Ok(value);
         }
 
+        let span = value.span();
         Err(Error::type_error(
             "Number".into(),
             self.string_description(value),
+            span,
         ))
     }
 
     fn string_description(&self, value: Value) -> String {
         match value {
-            Value::String(_) => "String".into(),
-            Value::Number(_) => "Number".into(),
-            Value::Boolean(_) => "Boolean".into(),
-            Value::Nil => "Nil".into(),
+            Value::String(_, _) => "String".into(),
+            Value::Number(_, _) => "Number".into(),
+            Value::Boolean(_, _) => "Boolean".into(),
+            Value::Nil(_) => "Nil".into(),
         }
     }
 }
 
 impl<'a> Interpreter<'a> {
-    pub fn interpret(source: &'a str, statements: &'a [Statement<'a>]) {
+    pub fn interpret(
+        source: &'a str,
+        statements: &'a [Statement<'a>],
+    ) -> Result<Vec<Value>, Error> {
         let interpreter = Self { source };
+        let mut values = vec![];
         for statement in statements {
             if let Statement::Expression(expression) = statement {
-                interpreter.evaluate_expression(expression).unwrap();
+                values.push(interpreter.evaluate_expression(expression)?);
             };
             if let Statement::Print(expression) = statement {
-                interpreter.evaluate_expression(expression).unwrap();
+                values.push(interpreter.evaluate_expression(expression)?);
             };
         }
+        Ok(values)
     }
 
     fn evaluate_expression(&self, expression: &'a Expression<'a>) -> Result<Value, Error> {
@@ -91,12 +100,18 @@ impl<'a> Interpreter<'a> {
             RightBrace => todo!(),
             Comma => todo!(),
             Dot => todo!(),
-            Minus => Ok(Value::Number(-self.as_number(right)?)),
+            Minus => Ok(Value::Number(
+                operator.span.combine(right.span()),
+                -self.as_number(right)?,
+            )),
             Plus => todo!(),
             Semicolon => todo!(),
             Slash => todo!(),
             Star => todo!(),
-            Bang => Ok(Value::Boolean(!self.is_truthy(right))),
+            Bang => Ok(Value::Boolean(
+                operator.span.combine(right.span()),
+                !self.is_truthy(right),
+            )),
             BangEqual => todo!(),
             Equal => todo!(),
             EqualEqual => todo!(),
@@ -130,29 +145,31 @@ impl<'a> Interpreter<'a> {
     fn evaluate_literal(&self, literal: &'a LiteralExpression) -> Result<Value, Error> {
         Ok(match literal {
             LiteralExpression::String_(value) => Value::String(
+                value.span,
                 Span::new(value.span.start + 1, value.span.end - 1)
                     .slice(self.source)
                     .to_owned(),
             ),
-            LiteralExpression::Number(value) => {
-                Value::Number(value.span.slice(self.source).parse().unwrap_or_else(|_| {
+            LiteralExpression::Number(value) => Value::Number(
+                value.span,
+                value.span.slice(self.source).parse().unwrap_or_else(|_| {
                     panic!(
                         "Couldn't parse number literal {}",
                         value.span.slice(self.source)
                     )
-                }))
-            }
-            LiteralExpression::Boolean(value) => Value::Boolean(*value),
-            LiteralExpression::Nil => Value::Nil,
+                }),
+            ),
+            LiteralExpression::Boolean(span, value) => Value::Boolean(span.clone(), *value),
+            LiteralExpression::Nil(span) => Value::Nil(span.clone()),
         })
     }
 
     fn is_truthy(&self, value: Value) -> bool {
         match value {
-            Value::String(_) => todo!(),
-            Value::Number(_) => todo!(),
-            Value::Boolean(value) => value,
-            Value::Nil => false,
+            Value::String(_, _) => todo!(),
+            Value::Number(_, _) => todo!(),
+            Value::Boolean(_, value) => value,
+            Value::Nil(_) => false,
         }
     }
 
@@ -163,6 +180,7 @@ impl<'a> Interpreter<'a> {
         operator: &'a Token,
     ) -> Result<Value, Error> {
         use TokenType::*;
+        let span = left.span().combine(operator.span).combine(right.span());
         Ok(match operator.type_ {
             LeftParen => todo!(),
             RightParen => todo!(),
@@ -171,6 +189,7 @@ impl<'a> Interpreter<'a> {
             Comma => todo!(),
             Dot => todo!(),
             Minus => Value::Number(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     - self.as_number(self.evaluate_expression(right)?)?,
             ),
@@ -180,36 +199,44 @@ impl<'a> Interpreter<'a> {
             )?,
             Semicolon => todo!(),
             Slash => Value::Number(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     / self.as_number(self.evaluate_expression(right)?)?,
             ),
             Star => Value::Number(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     * self.as_number(self.evaluate_expression(right)?)?,
             ),
             Bang => todo!(),
             BangEqual => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     != self.as_number(self.evaluate_expression(right)?)?,
             ),
             Equal => todo!(),
             EqualEqual => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     == self.as_number(self.evaluate_expression(right)?)?,
             ),
             Greater => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     > self.as_number(self.evaluate_expression(right)?)?,
             ),
             GreaterEqual => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     >= self.as_number(self.evaluate_expression(right)?)?,
             ),
             Less => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     < self.as_number(self.evaluate_expression(right)?)?,
             ),
             LessEqual => Value::Boolean(
+                span,
                 self.as_number(self.evaluate_expression(left)?)?
                     < self.as_number(self.evaluate_expression(right)?)?,
             ),
@@ -238,19 +265,29 @@ impl<'a> Interpreter<'a> {
 
     fn as_string(&self, value: Value) -> Result<String, Error> {
         match value {
-            Value::String(string) => Ok(string),
-            Value::Number(_) => todo!(),
-            Value::Boolean(_) => todo!(),
-            Value::Nil => todo!(),
+            Value::String(_, string) => Ok(string),
+            Value::Number(span, _) => Err(Error::type_error(
+                "String".to_string(),
+                "Number".to_string(),
+                span,
+            )),
+            Value::Boolean(_, _) => todo!(),
+            Value::Nil(_) => todo!(),
         }
     }
 
     fn plus_or_concat(&self, left: Value, right: Value) -> Result<Value, Error> {
         match left {
-            Value::String(left) => Ok(Value::String(left + &self.as_string(right)?)),
-            Value::Number(left) => Ok(Value::Number(left + self.as_number(right)?)),
-            Value::Boolean(_) => todo!(),
-            Value::Nil => todo!(),
+            Value::String(left_span, left) => Ok(Value::String(
+                left_span.combine(right.span()),
+                left + &self.as_string(right)?,
+            )),
+            Value::Number(left_span, left) => Ok(Value::Number(
+                left_span.combine(right.span()),
+                left + self.as_number(right)?,
+            )),
+            Value::Boolean(_, _) => todo!(),
+            Value::Nil(_) => todo!(),
         }
     }
 }

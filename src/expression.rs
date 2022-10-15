@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::{lexer::Token, span::Span};
 
 #[derive(Debug)]
 pub enum Expression<'a> {
@@ -44,6 +44,35 @@ impl<'a> Expression<'a> {
             Expression::Variable(_) => todo!(),
         }
     }
+
+    pub fn span(&self) -> Span {
+        match self {
+            Expression::Assignment(AssignmentExpression { name, value: _ }) => name.span,
+            Expression::Binary(BinaryExpression {
+                left,
+                right,
+                operator,
+            }) => left.span().combine(operator.span).combine(right.span()),
+            Expression::Call(CallExpression {
+                callee,
+                paren,
+                arguments,
+            }) => callee.span().combine(paren.span).combine(
+                arguments
+                    .iter()
+                    .fold(paren.span, |acc, el| acc.combine(el.span())),
+            ),
+            Expression::Get(GetExpression { object, name }) => object.span().combine(name.span),
+            Expression::Grouping(_) => todo!(),
+            Expression::Literal(literal_expression) => literal_expression.span(),
+            Expression::Logical(_) => todo!(),
+            Expression::Set(_) => todo!(),
+            Expression::Super(_) => todo!(),
+            Expression::This(_) => todo!(),
+            Expression::Unary(_) => todo!(),
+            Expression::Variable(_) => todo!(),
+        }
+    }
 }
 
 pub fn binary_expression<'a>(
@@ -66,12 +95,12 @@ pub fn string_literal_expression<'a>(value: &'a Token) -> Expression<'a> {
     Expression::Literal(LiteralExpression::String_(value))
 }
 
-pub fn boolean_literal_expression<'a>(value: bool) -> Expression<'a> {
-    Expression::Literal(LiteralExpression::Boolean(value))
+pub fn boolean_literal_expression<'a>(span: Span, value: bool) -> Expression<'a> {
+    Expression::Literal(LiteralExpression::Boolean(span, value))
 }
 
-pub fn nil_literal<'a>() -> Expression<'a> {
-    Expression::Literal(LiteralExpression::Nil)
+pub fn nil_literal<'a>(span: Span) -> Expression<'a> {
+    Expression::Literal(LiteralExpression::Nil(span))
 }
 
 pub fn grouping_expression<'a>(expression: Expression<'a>) -> Expression<'a> {
@@ -125,8 +154,8 @@ pub struct GroupingExpression<'a> {
 pub enum LiteralExpression<'a> {
     String_(&'a Token),
     Number(&'a Token),
-    Boolean(bool),
-    Nil,
+    Boolean(Span, bool),
+    Nil(Span),
 }
 
 impl<'a> LiteralExpression<'a> {
@@ -134,14 +163,23 @@ impl<'a> LiteralExpression<'a> {
         match self {
             LiteralExpression::String_(token) => token.span.slice(source).into(),
             LiteralExpression::Number(token) => token.span.slice(source).into(),
-            LiteralExpression::Boolean(boolean) => {
+            LiteralExpression::Boolean(_, boolean) => {
                 if *boolean {
                     "true".into()
                 } else {
                     "false".into()
                 }
             }
-            LiteralExpression::Nil => "nil".into(),
+            LiteralExpression::Nil(_) => "nil".into(),
+        }
+    }
+
+    pub(crate) fn span(&self) -> Span {
+        match self {
+            LiteralExpression::String_(token) => token.span,
+            LiteralExpression::Number(token) => token.span,
+            LiteralExpression::Boolean(span, _) => *span,
+            LiteralExpression::Nil(span) => *span,
         }
     }
 }

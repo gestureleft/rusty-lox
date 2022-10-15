@@ -1,6 +1,6 @@
 use std::cmp::{max, min};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 pub struct Span {
     pub start: usize,
     pub end: usize,

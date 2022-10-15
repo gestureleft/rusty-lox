@@ -19,7 +19,16 @@ pub fn run_repl() -> Result<(), Error> {
             let error = &parse_result.errors[0];
             error.display(&buffer);
         }
-        Interpreter::interpret(&buffer, &parse_result.statements);
+        let result = Interpreter::interpret(&buffer, &parse_result.statements);
+
+        if let Err(error) = result {
+            error.display(&buffer);
+        } else {
+            let values = result.unwrap();
+            for value in values {
+                value.pretty_print();
+            }
+        }
 
         if buffer == *"\n" {
             break;

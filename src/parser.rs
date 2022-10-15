@@ -117,13 +117,16 @@ impl Parser {
 
     fn parse_primary<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::False]) {
-            return Some(boolean_literal_expression(false));
+            let span = tokens.get(self.current_index - 1).unwrap().span;
+            return Some(boolean_literal_expression(span, false));
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::True]) {
-            return Some(boolean_literal_expression(true));
+            let span = tokens.get(self.current_index - 1).unwrap().span;
+            return Some(boolean_literal_expression(span, true));
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Nil]) {
-            return Some(nil_literal());
+            let span = tokens.get(self.current_index - 1).unwrap().span;
+            return Some(nil_literal(span));
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Number]) {
             return Some(number_literal_expression(
