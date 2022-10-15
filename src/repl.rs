@@ -24,11 +24,6 @@ pub fn run_repl() -> Result<(), Error> {
 
         if let Err(error) = result {
             error.display(&buffer);
-        } else {
-            let values = result.unwrap();
-            for value in values {
-                value.pretty_print();
-            }
         }
 
         if buffer == *"\n" {

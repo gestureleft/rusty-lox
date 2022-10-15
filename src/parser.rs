@@ -66,13 +66,34 @@ impl Parser {
     }
 
     fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
-        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
-            self.print_statement(tokens)
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::If]) {
+            self.parse_if_statement(tokens)
+        } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
+            self.parse_print_statement(tokens)
         } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
             Some(Statement::Block(self.parse_block(tokens)?))
         } else {
             self.expression_statement(tokens)
         }
+    }
+
+    fn parse_if_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+        self.consume_token_of_type(tokens, TokenType::LeftParen)?;
+        let condition = self.parse_expression(tokens)?;
+        self.consume_token_of_type(tokens, TokenType::RightParen)?;
+
+        let then_branch = Box::new(self.parse_statement(tokens)?);
+        let else_branch = if self.consume_token_if_in_vec(tokens, &vec![TokenType::Else]) {
+            self.parse_statement(tokens).map(Box::new)
+        } else {
+            None
+        };
+
+        Some(Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
     }
 
     fn parse_block<'a>(&mut self, tokens: &'a [Token]) -> Option<Vec<Statement<'a>>> {
@@ -86,7 +107,7 @@ impl Parser {
         Some(statements)
     }
 
-    fn print_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_print_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
         let expression = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::Semicolon)?;
         Some(Statement::Print(expression))

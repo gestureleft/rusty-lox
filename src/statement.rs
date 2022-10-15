@@ -6,6 +6,11 @@ pub enum Statement<'a> {
     Expression(Expression<'a>),
     VariableDeclaration(VariableDeclaration<'a>),
     Block(Vec<Statement<'a>>),
+    If {
+        condition: Expression<'a>,
+        then_branch: Box<Statement<'a>>,
+        else_branch: Option<Box<Statement<'a>>>,
+    },
 }
 
 #[derive(Debug)]

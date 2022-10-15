@@ -77,33 +77,25 @@ impl Interpreter {
         None
     }
 
-    pub fn interpret(
-        &mut self,
-        source: &str,
-        statements: Vec<Statement>,
-    ) -> Result<Vec<Value>, Error> {
+    pub fn interpret(&mut self, source: &str, statements: Vec<Statement>) -> Result<(), Error> {
         self.evaluate_statements(source, &statements)
     }
 
-    fn evaluate_statements(
-        &mut self,
-        source: &str,
-        statements: &[Statement],
-    ) -> Result<Vec<Value>, Error> {
+    fn evaluate_statements(&mut self, source: &str, statements: &[Statement]) -> Result<(), Error> {
         statements
             .iter()
-            .map(|statement| self.evaluate_statement(source, statement))
-            .collect::<Result<_, _>>()
+            .try_for_each(|statement| self.evaluate_statement(source, statement))
     }
 
-    fn evaluate_statement(&mut self, source: &str, statement: &Statement) -> Result<Value, Error> {
+    fn evaluate_statement(&mut self, source: &str, statement: &Statement) -> Result<(), Error> {
         match statement {
             Statement::Print(expression) => {
                 let result = self.evaluate_expression(source, expression)?;
                 result.pretty_print();
-                Ok(result)
             }
-            Statement::Expression(expression) => self.evaluate_expression(source, expression),
+            Statement::Expression(expression) => {
+                self.evaluate_expression(source, expression)?;
+            }
             Statement::VariableDeclaration(VariableDeclaration { name, initialiser }) => {
                 let value = if let Some(initialiser) = initialiser {
                     self.evaluate_expression(source, initialiser)?
@@ -111,16 +103,27 @@ impl Interpreter {
                     Value::Nil(name.span)
                 };
                 self.current_scope()
-                    .define(name.span.slice(source).to_string(), value.clone());
-                Ok(value)
+                    .define(name.span.slice(source).to_string(), value);
             }
             Statement::Block(statements) => {
                 self.environment_stack.push(Environment::new());
                 self.evaluate_statements(source, statements)?;
                 self.environment_stack.pop();
-                Ok(Value::Nil(Span::new(0, 0)))
             }
-        }
+            Statement::If {
+                condition,
+                then_branch,
+                else_branch,
+            } => {
+                let condition = self.evaluate_expression(source, condition)?;
+                if self.is_truthy(condition) {
+                    self.evaluate_statement(source, then_branch)?;
+                } else if let Some(else_branch) = else_branch {
+                    self.evaluate_statement(source, else_branch)?;
+                }
+            }
+        };
+        Ok(())
     }
 
     fn evaluate_expression(
