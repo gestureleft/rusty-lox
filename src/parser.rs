@@ -28,8 +28,6 @@ impl Parser {
         while let Some(token) = parser.current_token(tokens) && token.type_ != TokenType::Eof {
             let expression = parser.parse_expression(tokens);
             if expression.is_none() {
-                println!("Couldnt' parse expression");
-                // TODO: Synchronise parser
                 parser.synchronise(tokens);
                 continue;
             }

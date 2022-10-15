@@ -50,8 +50,11 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let value = Interpreter::interpret(&file_contents, &parse_result.statements);
-    println!("{:?}", value);
+    let result = Interpreter::interpret(&file_contents, &parse_result.statements);
+
+    if let Err(error) = result {
+        error.display(&file_contents);
+    }
 
     Ok(())
 }
