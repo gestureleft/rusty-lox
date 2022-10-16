@@ -12,7 +12,7 @@ use crate::{
 use error::Error;
 use value::Value;
 
-use self::environment::Environment;
+use self::{environment::Environment, value::Callable};
 
 mod environment;
 mod error;
@@ -104,14 +104,14 @@ impl Interpreter {
                 body,
             } => self.current_scope().define(
                 name.span.slice(source).to_string(),
-                Rc::new(Value::Callable {
+                Rc::new(Value::Callable(Callable {
                     name_span: name.span,
                     parameters: parameters
                         .iter()
                         .map(|token| token.span.slice(source).to_string())
                         .collect(),
                     body: body.clone(),
-                }),
+                })),
             ),
             Declaration::Variable { name, initialiser } => {
                 let value = if let Some(initialiser) = initialiser {
@@ -186,8 +186,8 @@ impl Interpreter {
             }) => self.evaluate_binary_expression(source, left.clone(), right.clone(), operator),
             Expression::Call(CallExpression {
                 callee,
-                closing_paren,
                 arguments,
+                closing_paren,
             }) => self.evaluate_call(source, callee.clone(), closing_paren.clone(), arguments),
             Expression::Get(_) => todo!(),
             Expression::Grouping(GroupingExpression { expression }) => {
@@ -222,6 +222,14 @@ impl Interpreter {
         }
     }
 
+    fn value_as_callable(&self, value: Rc<Value>, name_span: Span) -> Result<Callable, Error> {
+        if let Value::Callable(callable) = &*value {
+            Ok(callable.clone())
+        } else {
+            Err(Error::NotCallable(name_span))
+        }
+    }
+
     fn evaluate_call(
         &mut self,
         source: &str,
@@ -229,14 +237,33 @@ impl Interpreter {
         closing_paren: Token,
         arguments: &[Rc<Expression>],
     ) -> Result<Rc<Value>, Error> {
+        let callee_span = callee.span();
         let callee = self.evaluate_expression(source, callee)?;
+        let callee = self.value_as_callable(callee, callee_span)?;
+
+        if callee.parameters.len() != arguments.len() {
+            return Err(Error::Arity {
+                expected: callee.parameters.len(),
+                got: arguments.len(),
+                call_span: callee_span.combine(closing_paren.span),
+            });
+        };
+
         let mut argument_values = Vec::new();
 
         for argument in arguments {
             argument_values.push(self.evaluate_expression(source, argument.clone())?);
         }
 
-        todo!();
+        self.environment_stack.push(Environment::new());
+        for (paramater_name, argument) in callee.parameters.iter().zip(argument_values.iter()) {
+            self.current_scope()
+                .define(paramater_name.to_owned(), argument.clone())
+        }
+        self.evaluate_declarations(source, &callee.body)?;
+        self.environment_stack.pop();
+
+        Ok(Rc::new(Value::Nil(Span::new(0, 0))))
     }
 
     fn evaluate_unary_expression(

@@ -1,0 +1,11 @@
+var global = "global 1";
+
+fun hello(name) {
+  print("hello " + name + "!");
+  print("Global is: " + global);
+}
+
+
+hello("world");
+global = "global 2";
+hello("Harry");

@@ -7,6 +7,12 @@ use crate::{
 pub enum Error {
     Type(TypeError),
     VariableDoesntExist(Token),
+    NotCallable(Span),
+    Arity {
+        got: usize,
+        expected: usize,
+        call_span: Span,
+    },
 }
 
 #[derive(Debug)]
@@ -41,6 +47,21 @@ impl Error {
             Error::VariableDoesntExist(token) => {
                 lexer::Error::display_error(source, &token.span, "Variable doesn't exist")
             }
+            Error::NotCallable(name_span) => {
+                lexer::Error::display_error(source, name_span, "Value is not callable")
+            }
+            Error::Arity {
+                got,
+                expected,
+                call_span,
+            } => lexer::Error::display_error(
+                source,
+                call_span,
+                &format!(
+                    "Wrong number of call arguments. Expected {}, but got {}",
+                    expected, got
+                ),
+            ),
         }
     }
 }
