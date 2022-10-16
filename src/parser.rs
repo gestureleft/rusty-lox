@@ -1,12 +1,14 @@
+use std::rc::Rc;
+
 use crate::{
     expression::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
         number_literal_expression, string_literal_expression, unary_expression,
-        AssignmentExpression, Expression, LogicalExpression, VariableExpression,
+        AssignmentExpression, CallExpression, Expression, LogicalExpression, VariableExpression,
     },
     lexer::{self, Token, TokenType},
     span::Span,
-    statement::{Statement, VariableDeclaration},
+    statement::{Declaration, Statement},
 };
 
 pub struct Parser {
@@ -14,58 +16,93 @@ pub struct Parser {
     errors: Vec<Error>,
 }
 
-pub struct ParserResult<'a> {
+pub struct ParserResult {
     pub errors: Vec<Error>,
-    pub statements: Vec<Statement<'a>>,
+    pub declarations: Vec<Declaration>,
 }
 
 impl Parser {
-    pub fn parse<'a>(tokens: &'a [Token]) -> ParserResult<'a> {
+    pub fn parse(tokens: &[Token]) -> ParserResult {
         let mut parser = Parser {
             current_index: 0,
             errors: vec![],
         };
-        let mut statements = vec![];
+        let mut declarations = vec![];
         while let Some(token) = parser.current_token(tokens) && token.type_ != TokenType::Eof {
-            let statement = parser.parse_declaration(tokens);
-            if statement.is_none() {
+            let declaration = parser.parse_declaration(tokens);
+            if declaration.is_none() {
                 parser.synchronise(tokens);
                 continue;
             }
-            statements.push(statement.unwrap());
+            declarations.push(declaration.unwrap());
         }
 
         ParserResult {
             errors: parser.errors,
-            statements,
+            declarations,
         }
     }
 
-    fn parse_declaration<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_declaration(&mut self, tokens: &[Token]) -> Option<Declaration> {
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Fun]) {
+            return self.parse_function_declaration(tokens);
+        };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Var]) {
             return self.parse_variable_declaration(tokens);
         };
 
-        self.parse_statement(tokens)
+        Some(Declaration::Statement(self.parse_statement(tokens)?))
     }
 
-    fn parse_variable_declaration<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
-        let name = self
-            .consume_token_of_type(tokens, TokenType::Identifier)?
-            .clone();
+    fn parse_function_declaration(&mut self, tokens: &[Token]) -> Option<Declaration> {
+        let name = self.consume_token_of_type(tokens, TokenType::Identifier)?;
+        self.consume_token_of_type(tokens, TokenType::LeftParen)?;
+        let mut parameters = Vec::new();
+        if self.current_token(tokens)?.type_ != TokenType::RightParen {
+            loop {
+                // Make sure there's not too many arguments
+                if parameters.len() >= 255 {
+                    self.errors.push(Error::TwoManyArguments {
+                        callee_span: name.span,
+                    });
+                    return None;
+                };
+
+                parameters.push(
+                    self.consume_token_of_type(tokens, TokenType::Identifier)?
+                        .clone(),
+                );
+
+                // If we don't find another comma, we're done parsing arguments
+                if !self.consume_token_if_in_vec(tokens, &vec![TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+        self.consume_token_of_type(tokens, TokenType::RightParen)?;
+
+        self.consume_token_of_type(tokens, TokenType::LeftBrace)?;
+        let body = self.parse_block(tokens)?;
+
+        Some(Declaration::Function {
+            name,
+            parameters,
+            body,
+        })
+    }
+
+    fn parse_variable_declaration(&mut self, tokens: &[Token]) -> Option<Declaration> {
+        let name = self.consume_token_of_type(tokens, TokenType::Identifier)?;
         let initialiser = if self.consume_token_if_in_vec(tokens, &vec![TokenType::Equal]) {
             self.parse_expression(tokens)
         } else {
             None
         };
         self.consume_token_of_type(tokens, TokenType::Semicolon)?;
-        Some(Statement::VariableDeclaration(VariableDeclaration {
-            name,
-            initialiser,
-        }))
+        Some(Declaration::Variable { name, initialiser })
     }
 
-    fn parse_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         // If statement
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::If]) {
             return self.parse_if_statement(tokens);
@@ -91,14 +128,16 @@ impl Parser {
         self.parse_expression_statement(tokens)
     }
 
-    fn parse_for_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_for_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         self.consume_token_of_type(tokens, TokenType::LeftParen)?;
         let initialiser = if self.consume_token_if_in_vec(tokens, &vec![TokenType::Semicolon]) {
             None
         } else if self.consume_token_if_in_vec(tokens, &vec![TokenType::Var]) {
             self.parse_variable_declaration(tokens)
         } else {
-            self.parse_expression_statement(tokens)
+            Some(Declaration::Statement(
+                self.parse_expression_statement(tokens)?,
+            ))
         };
 
         let current_token = self.current_token(tokens)?;
@@ -123,7 +162,10 @@ impl Parser {
             let mut body = self.parse_statement(tokens)?;
 
             if let Some(increment) = increment {
-                body = Statement::Block(vec![body, Statement::Expression(increment)]);
+                body = Statement::Block(Rc::new(vec![
+                    Declaration::Statement(body),
+                    Declaration::Statement(Statement::Expression(increment)),
+                ]));
             }
 
             if let Some(condition) = condition {
@@ -134,7 +176,7 @@ impl Parser {
             }
 
             if let Some(initialiser) = initialiser {
-                body = Statement::Block(vec![initialiser, body]);
+                body = Statement::Block(Rc::new(vec![initialiser, Declaration::Statement(body)]));
             }
             body
         };
@@ -142,7 +184,7 @@ impl Parser {
         Some(body)
     }
 
-    fn parse_while_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_while_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         self.consume_token_of_type(tokens, TokenType::LeftParen)?;
         let condition = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::RightParen)?;
@@ -152,7 +194,7 @@ impl Parser {
         Some(Statement::While { condition, body })
     }
 
-    fn parse_if_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_if_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         self.consume_token_of_type(tokens, TokenType::LeftParen)?;
         let condition = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::RightParen)?;
@@ -171,44 +213,45 @@ impl Parser {
         })
     }
 
-    fn parse_block<'a>(&mut self, tokens: &'a [Token]) -> Option<Vec<Statement<'a>>> {
+    fn parse_block(&mut self, tokens: &[Token]) -> Option<Rc<Vec<Declaration>>> {
         let mut statements = vec![];
-        while self.current_token(tokens).map(|t| &t.type_) != Some(&TokenType::RightBrace)
+        while self.current_token(tokens).map(|t| t.type_) != Some(TokenType::RightBrace)
             && self.current_token(tokens).is_some()
         {
-            statements.push(self.parse_declaration(tokens)?);
+            let declaration = self.parse_declaration(tokens)?;
+            statements.push(declaration);
         }
         self.consume_token_of_type(tokens, TokenType::RightBrace)?;
-        Some(statements)
+        Some(Rc::new(statements))
     }
 
-    fn parse_print_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_print_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         let expression = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::Semicolon)?;
         Some(Statement::Print(expression))
     }
 
-    fn parse_expression_statement<'a>(&mut self, tokens: &'a [Token]) -> Option<Statement<'a>> {
+    fn parse_expression_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
         let expression = self.parse_expression(tokens)?;
         self.consume_token_of_type(tokens, TokenType::Semicolon)?;
         Some(Statement::Expression(expression))
     }
 
-    fn parse_expression<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_expression(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         self.parse_assignment(tokens)
     }
 
-    fn parse_assignment<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_assignment(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let expression = self.parse_or(tokens)?;
 
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Equal]) {
             let value = self.parse_assignment(tokens)?;
 
-            if let Expression::Variable(variable_expression) = expression {
-                return Some(Expression::Assignment(AssignmentExpression {
-                    name: variable_expression.name,
-                    value: Box::new(value),
-                }));
+            if let Expression::Variable(variable_expression) = &*expression {
+                return Some(Rc::new(Expression::Assignment(AssignmentExpression {
+                    name: variable_expression.name.clone(),
+                    value,
+                })));
             };
 
             self.errors.push(Error::InvalidAssignmentTarget {
@@ -219,45 +262,45 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_or<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_or(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_and(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::Or]) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
-            let right = Box::new(self.parse_and(tokens)?);
-            expression = Expression::Logical(LogicalExpression {
-                left: Box::new(expression),
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
+            let right = self.parse_and(tokens)?;
+            expression = Rc::new(Expression::Logical(LogicalExpression {
+                left: expression,
                 right,
                 operator,
-            })
+            }))
         }
 
         Some(expression)
     }
 
-    fn parse_and<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_and(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_equality(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::And]) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
-            let right = Box::new(self.parse_equality(tokens)?);
-            expression = Expression::Logical(LogicalExpression {
-                left: Box::new(expression),
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
+            let right = self.parse_equality(tokens)?;
+            expression = Rc::new(Expression::Logical(LogicalExpression {
+                left: expression,
                 right,
                 operator,
-            });
+            }));
         }
 
         Some(expression)
     }
 
-    fn parse_equality<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_equality(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_comparison(tokens)?;
 
         while self
             .consume_token_if_in_vec(tokens, &vec![TokenType::BangEqual, TokenType::EqualEqual])
         {
-            let operator = tokens.get(self.current_index - 1).unwrap();
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
             let right = self.parse_comparison(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
@@ -265,7 +308,7 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_comparison<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_comparison(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_term(tokens)?;
 
         while self.consume_token_if_in_vec(
@@ -277,7 +320,7 @@ impl Parser {
                 TokenType::LessEqual,
             ],
         ) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
             let right = self.parse_term(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
@@ -285,11 +328,11 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_term<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_term(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_factor(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::Minus, TokenType::Plus]) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
             let right = self.parse_factor(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
@@ -297,11 +340,11 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_factor<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_factor(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         let mut expression = self.parse_unary(tokens)?;
 
         while self.consume_token_if_in_vec(tokens, &vec![TokenType::Slash, TokenType::Star]) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
             let right = self.parse_unary(tokens)?;
             expression = binary_expression(expression, right, operator);
         }
@@ -309,17 +352,64 @@ impl Parser {
         Some(expression)
     }
 
-    fn parse_unary<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_unary(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Bang, TokenType::Minus]) {
-            let operator = tokens.get(self.current_index - 1).unwrap();
+            let operator = tokens.get(self.current_index - 1).unwrap().clone();
             let right = self.parse_unary(tokens)?;
             return Some(unary_expression(operator, right));
         };
 
-        self.parse_primary(tokens)
+        self.parse_call(tokens)
     }
 
-    fn parse_primary<'a>(&mut self, tokens: &'a [Token]) -> Option<Expression<'a>> {
+    fn parse_call(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
+        let mut expression = self.parse_primary(tokens)?;
+
+        loop {
+            if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen]) {
+                expression = self.parse_call_arguments(tokens, expression)?;
+            } else {
+                break;
+            }
+        }
+
+        Some(expression)
+    }
+
+    /// Given an expression being called, parse the arguments being passed to it
+    /// (including the parens)
+    fn parse_call_arguments(
+        &mut self,
+        tokens: &[Token],
+        callee: Rc<Expression>,
+    ) -> Option<Rc<Expression>> {
+        let mut arguments = Vec::new();
+
+        let current_token = self.current_token(tokens)?;
+        if current_token.type_ != TokenType::RightParen {
+            loop {
+                arguments.push(self.parse_expression(tokens)?);
+                if arguments.len() >= 255 {
+                    self.errors.push(Error::TwoManyArguments {
+                        callee_span: callee.span(),
+                    })
+                }
+                if !self.consume_token_if_in_vec(tokens, &vec![TokenType::Comma]) {
+                    break;
+                }
+            }
+        }
+
+        let closing_paren = self.consume_token_of_type(tokens, TokenType::RightParen)?;
+
+        Some(Rc::new(Expression::Call(CallExpression {
+            callee,
+            closing_paren,
+            arguments,
+        })))
+    }
+
+    fn parse_primary(&mut self, tokens: &[Token]) -> Option<Rc<Expression>> {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::False]) {
             let span = tokens.get(self.current_index - 1).unwrap().span;
             return Some(boolean_literal_expression(span, false));
@@ -334,29 +424,28 @@ impl Parser {
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Number]) {
             return Some(number_literal_expression(
-                tokens.get(self.current_index - 1).unwrap(),
+                tokens.get(self.current_index - 1).unwrap().clone(),
             ));
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::String_]) {
             return Some(string_literal_expression(
-                tokens.get(self.current_index - 1).unwrap(),
+                tokens.get(self.current_index - 1).unwrap().clone(),
             ));
         };
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Identifier]) {
-            return Some(Expression::Variable(VariableExpression {
-                name: tokens.get(self.current_index - 1).unwrap(),
-            }));
+            return Some(Rc::new(Expression::Variable(VariableExpression {
+                name: tokens.get(self.current_index - 1).unwrap().clone(),
+            })));
         }
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftParen]) {
             let expression = self.parse_expression(tokens)?;
-            let current_token = self.current_token(tokens);
+            let current_token = self.current_token(tokens)?;
 
-            if current_token.expect("Unexpectedly ran out of tokens").type_ != TokenType::RightParen
-            {
+            if current_token.type_ != TokenType::RightParen {
                 self.errors.push(Error::UnexpectedToken {
                     expected_token_type: Some(TokenType::RightParen),
-                    unexpected_token_type: current_token.unwrap().type_.clone(),
-                    span: current_token.unwrap().span,
+                    unexpected_token_type: current_token.type_.clone(),
+                    span: current_token.span,
                 });
                 return None;
             }
@@ -367,17 +456,13 @@ impl Parser {
 
         self.errors.push(Error::UnexpectedToken {
             expected_token_type: None,
-            unexpected_token_type: self.current_token(tokens).unwrap().type_.clone(),
+            unexpected_token_type: self.current_token(tokens).unwrap().type_,
             span: self.current_token(tokens).unwrap().span,
         });
         None
     }
 
-    fn consume_token_of_type<'a>(
-        &'a mut self,
-        tokens: &'a [Token],
-        token_type: TokenType,
-    ) -> Option<&'a Token> {
+    fn consume_token_of_type(&mut self, tokens: &[Token], token_type: TokenType) -> Option<Token> {
         let current_token = self.current_token(tokens);
         if current_token.is_none() {
             self.errors.push(Error::UnexpectedEof);
@@ -418,8 +503,8 @@ impl Parser {
         false
     }
 
-    fn current_token<'a>(&self, tokens: &'a [Token]) -> Option<&'a Token> {
-        tokens.get(self.current_index)
+    fn current_token(&self, tokens: &[Token]) -> Option<Token> {
+        tokens.get(self.current_index).cloned()
     }
 
     pub(crate) fn synchronise(&mut self, tokens: &[Token]) {
@@ -452,6 +537,9 @@ pub enum Error {
     InvalidAssignmentTarget {
         target_span: Span,
     },
+    TwoManyArguments {
+        callee_span: Span,
+    },
 }
 
 impl Error {
@@ -477,6 +565,9 @@ impl Error {
             Error::UnexpectedEof => todo!(),
             Error::InvalidAssignmentTarget { target_span } => {
                 lexer::Error::display_error(source, target_span, "Invalid assignment target")
+            }
+            Error::TwoManyArguments { callee_span } => {
+                lexer::Error::display_error(source, callee_span, "Too many arguments to call")
             }
         }
     }

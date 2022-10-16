@@ -1,22 +1,24 @@
+use std::rc::Rc;
+
 use crate::{lexer::Token, span::Span};
 
 #[derive(Debug)]
-pub enum Expression<'a> {
-    Assignment(AssignmentExpression<'a>),
-    Binary(BinaryExpression<'a>),
-    Call(CallExpression<'a>),
-    Get(GetExpression<'a>),
-    Grouping(GroupingExpression<'a>),
-    Literal(LiteralExpression<'a>),
-    Logical(LogicalExpression<'a>),
-    Set(SetExpression<'a>),
-    Super(SuperExpression<'a>),
-    This(ThisExpression<'a>),
-    Unary(UnaryExpression<'a>),
-    Variable(VariableExpression<'a>),
+pub enum Expression {
+    Assignment(AssignmentExpression),
+    Binary(BinaryExpression),
+    Call(CallExpression),
+    Get(GetExpression),
+    Grouping(GroupingExpression),
+    Literal(LiteralExpression),
+    Logical(LogicalExpression),
+    Set(SetExpression),
+    Super(SuperExpression),
+    This(ThisExpression),
+    Unary(UnaryExpression),
+    Variable(VariableExpression),
 }
 
-impl<'a> Expression<'a> {
+impl Expression {
     pub fn prettify(&self, source: &str) -> String {
         match self {
             Expression::Assignment(_) => todo!(),
@@ -55,13 +57,9 @@ impl<'a> Expression<'a> {
             }) => left.span().combine(operator.span).combine(right.span()),
             Expression::Call(CallExpression {
                 callee,
-                paren,
-                arguments,
-            }) => callee.span().combine(paren.span).combine(
-                arguments
-                    .iter()
-                    .fold(paren.span, |acc, el| acc.combine(el.span())),
-            ),
+                closing_paren,
+                arguments: _,
+            }) => callee.span().combine(closing_paren.span),
             Expression::Get(GetExpression { object, name }) => object.span().combine(name.span),
             Expression::Grouping(_) => todo!(),
             Expression::Literal(literal_expression) => literal_expression.span(),
@@ -75,90 +73,90 @@ impl<'a> Expression<'a> {
     }
 }
 
-pub fn binary_expression<'a>(
-    left: Expression<'a>,
-    right: Expression<'a>,
-    operator: &'a Token,
-) -> Expression<'a> {
-    Expression::Binary(BinaryExpression::new(left, right, operator))
+pub fn binary_expression(
+    left: Rc<Expression>,
+    right: Rc<Expression>,
+    operator: Token,
+) -> Rc<Expression> {
+    Rc::new(Expression::Binary(BinaryExpression::new(
+        left, right, operator,
+    )))
 }
 
-pub fn unary_expression<'a>(operator: &'a Token, right: Expression<'a>) -> Expression<'a> {
-    Expression::Unary(UnaryExpression::new(operator, right))
+pub fn unary_expression(operator: Token, right: Rc<Expression>) -> Rc<Expression> {
+    Rc::new(Expression::Unary(UnaryExpression::new(operator, right)))
 }
 
-pub fn number_literal_expression<'a>(value: &'a Token) -> Expression<'a> {
-    Expression::Literal(LiteralExpression::Number(value))
+pub fn number_literal_expression(value: Token) -> Rc<Expression> {
+    Rc::new(Expression::Literal(LiteralExpression::Number(value)))
 }
 
-pub fn string_literal_expression<'a>(value: &'a Token) -> Expression<'a> {
-    Expression::Literal(LiteralExpression::String_(value))
+pub fn string_literal_expression(value: Token) -> Rc<Expression> {
+    Rc::new(Expression::Literal(LiteralExpression::String_(value)))
 }
 
-pub fn boolean_literal_expression<'a>(span: Span, value: bool) -> Expression<'a> {
-    Expression::Literal(LiteralExpression::Boolean(span, value))
+pub fn boolean_literal_expression(span: Span, value: bool) -> Rc<Expression> {
+    Rc::new(Expression::Literal(LiteralExpression::Boolean(span, value)))
 }
 
-pub fn nil_literal<'a>(span: Span) -> Expression<'a> {
-    Expression::Literal(LiteralExpression::Nil(span))
+pub fn nil_literal(span: Span) -> Rc<Expression> {
+    Rc::new(Expression::Literal(LiteralExpression::Nil(span)))
 }
 
-pub fn grouping_expression<'a>(expression: Expression<'a>) -> Expression<'a> {
-    Expression::Grouping(GroupingExpression {
-        expression: Box::new(expression),
-    })
-}
-
-#[derive(Debug)]
-pub struct AssignmentExpression<'a> {
-    pub name: &'a Token,
-    pub value: Box<Expression<'a>>,
+pub fn grouping_expression(expression: Rc<Expression>) -> Rc<Expression> {
+    Rc::new(Expression::Grouping(GroupingExpression { expression }))
 }
 
 #[derive(Debug)]
-pub struct BinaryExpression<'a> {
-    pub left: Box<Expression<'a>>,
-    pub right: Box<Expression<'a>>,
-    pub operator: &'a Token,
+pub struct AssignmentExpression {
+    pub name: Token,
+    pub value: Rc<Expression>,
 }
 
-impl<'a> BinaryExpression<'a> {
-    pub fn new(left: Expression<'a>, right: Expression<'a>, operator: &'a Token) -> Self {
+#[derive(Debug)]
+pub struct BinaryExpression {
+    pub left: Rc<Expression>,
+    pub right: Rc<Expression>,
+    pub operator: Token,
+}
+
+impl BinaryExpression {
+    pub fn new(left: Rc<Expression>, right: Rc<Expression>, operator: Token) -> Self {
         Self {
-            left: Box::new(left),
-            right: Box::new(right),
+            left,
+            right,
             operator,
         }
     }
 }
 
 #[derive(Debug)]
-pub struct CallExpression<'a> {
-    callee: Box<Expression<'a>>,
-    paren: &'a Token,
-    arguments: Vec<Expression<'a>>,
+pub struct CallExpression {
+    pub callee: Rc<Expression>,
+    pub closing_paren: Token,
+    pub arguments: Vec<Rc<Expression>>,
 }
 
 #[derive(Debug)]
-pub struct GetExpression<'a> {
-    object: Box<Expression<'a>>,
-    name: &'a Token,
+pub struct GetExpression {
+    object: Rc<Expression>,
+    name: Token,
 }
 
 #[derive(Debug)]
-pub struct GroupingExpression<'a> {
-    pub expression: Box<Expression<'a>>,
+pub struct GroupingExpression {
+    pub expression: Rc<Expression>,
 }
 
 #[derive(Debug)]
-pub enum LiteralExpression<'a> {
-    String_(&'a Token),
-    Number(&'a Token),
+pub enum LiteralExpression {
+    String_(Token),
+    Number(Token),
     Boolean(Span, bool),
     Nil(Span),
 }
 
-impl<'a> LiteralExpression<'a> {
+impl LiteralExpression {
     fn prettify(&self, source: &str) -> String {
         match self {
             LiteralExpression::String_(token) => token.span.slice(source).into(),
@@ -185,46 +183,43 @@ impl<'a> LiteralExpression<'a> {
 }
 
 #[derive(Debug)]
-pub struct LogicalExpression<'a> {
-    pub left: Box<Expression<'a>>,
-    pub right: Box<Expression<'a>>,
-    pub operator: &'a Token,
+pub struct LogicalExpression {
+    pub left: Rc<Expression>,
+    pub right: Rc<Expression>,
+    pub operator: Token,
 }
 
 #[derive(Debug)]
-pub struct SetExpression<'a> {
-    object: Box<Expression<'a>>,
-    name: &'a Token,
-    value: Box<Expression<'a>>,
+pub struct SetExpression {
+    object: Rc<Expression>,
+    name: Token,
+    value: Rc<Expression>,
 }
 
 #[derive(Debug)]
-pub struct SuperExpression<'a> {
-    keyword: &'a Token,
-    method: &'a Token,
+pub struct SuperExpression {
+    keyword: Token,
+    method: Token,
 }
 
 #[derive(Debug)]
-pub struct ThisExpression<'a> {
-    keyword: &'a Token,
+pub struct ThisExpression {
+    keyword: Token,
 }
 
 #[derive(Debug)]
-pub struct UnaryExpression<'a> {
-    pub operator: &'a Token,
-    pub right: Box<Expression<'a>>,
+pub struct UnaryExpression {
+    pub operator: Token,
+    pub right: Rc<Expression>,
 }
 
-impl<'a> UnaryExpression<'a> {
-    pub fn new(operator: &'a Token, right: Expression<'a>) -> Self {
-        Self {
-            operator,
-            right: Box::new(right),
-        }
+impl UnaryExpression {
+    pub fn new(operator: Token, right: Rc<Expression>) -> Self {
+        Self { operator, right }
     }
 }
 
 #[derive(Debug)]
-pub struct VariableExpression<'a> {
-    pub name: &'a Token,
+pub struct VariableExpression {
+    pub name: Token,
 }

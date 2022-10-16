@@ -1,24 +1,33 @@
+use std::rc::Rc;
+
 use crate::{expression::Expression, lexer::Token};
 
 #[derive(Debug)]
-pub enum Statement<'a> {
-    Print(Expression<'a>),
-    Expression(Expression<'a>),
-    VariableDeclaration(VariableDeclaration<'a>),
-    Block(Vec<Statement<'a>>),
-    If {
-        condition: Expression<'a>,
-        then_branch: Box<Statement<'a>>,
-        else_branch: Option<Box<Statement<'a>>>,
+pub enum Declaration {
+    Function {
+        name: Token,
+        parameters: Vec<Token>,
+        body: Rc<Vec<Declaration>>,
     },
-    While {
-        condition: Expression<'a>,
-        body: Box<Statement<'a>>,
+    Variable {
+        name: Token,
+        initialiser: Option<Rc<Expression>>,
     },
+    Statement(Statement),
 }
 
 #[derive(Debug)]
-pub struct VariableDeclaration<'a> {
-    pub name: Token,
-    pub initialiser: Option<Expression<'a>>,
+pub enum Statement {
+    Print(Rc<Expression>),
+    Expression(Rc<Expression>),
+    Block(Rc<Vec<Declaration>>),
+    If {
+        condition: Rc<Expression>,
+        then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
+    },
+    While {
+        condition: Rc<Expression>,
+        body: Box<Statement>,
+    },
 }

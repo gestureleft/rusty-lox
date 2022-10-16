@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::lexer::Token;
 
@@ -6,7 +6,7 @@ use super::value::Value;
 
 #[derive(Debug)]
 pub struct Environment {
-    values: HashMap<String, Value>,
+    values: HashMap<String, Rc<Value>>,
 }
 
 impl Environment {
@@ -16,11 +16,11 @@ impl Environment {
         }
     }
 
-    pub(crate) fn define(&mut self, name: String, value: Value) {
+    pub(crate) fn define(&mut self, name: String, value: Rc<Value>) {
         self.values.insert(name, value);
     }
 
-    pub(crate) fn get(&self, source: &str, token: &Token) -> Option<Value> {
+    pub(crate) fn get(&self, source: &str, token: &Token) -> Option<Rc<Value>> {
         let value = self.values.get(token.span.slice(source)).cloned();
         if value.is_some() {
             return value;
@@ -28,7 +28,7 @@ impl Environment {
         None
     }
 
-    pub(crate) fn assign(&mut self, name: &String, new_value: &Value) -> Result<(), ()> {
+    pub(crate) fn assign(&mut self, name: &String, new_value: &Rc<Value>) -> Result<(), ()> {
         let value = self.values.get_mut(name);
         if let Some(value) = value {
             *value = new_value.clone();

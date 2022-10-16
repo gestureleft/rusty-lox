@@ -50,7 +50,7 @@ fn main() -> Result<(), Error> {
         return Ok(());
     }
 
-    let result = Interpreter::new().interpret(&file_contents, parse_result.statements);
+    let result = Interpreter::new().interpret(&file_contents, parse_result.declarations);
 
     if let Err(error) = result {
         error.display(&file_contents);

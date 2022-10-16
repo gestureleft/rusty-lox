@@ -20,7 +20,7 @@ pub fn run_repl() -> Result<(), Error> {
             let error = &parse_result.errors[0];
             error.display(&buffer);
         }
-        let result = interpreter.interpret(&buffer, parse_result.statements);
+        let result = interpreter.interpret(&buffer, parse_result.declarations);
 
         if let Err(error) = result {
             error.display(&buffer);

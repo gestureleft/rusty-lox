@@ -1,4 +1,6 @@
-use crate::span::Span;
+use std::rc::Rc;
+
+use crate::{span::Span, statement::Declaration};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -6,6 +8,11 @@ pub enum Value {
     Number(Span, f64),
     Boolean(Span, bool),
     Nil(Span),
+    Callable {
+        name_span: Span,
+        parameters: Vec<String>,
+        body: Rc<Vec<Declaration>>,
+    },
 }
 
 impl Value {
@@ -15,6 +22,11 @@ impl Value {
             Value::Number(span, _) => span,
             Value::Boolean(span, _) => span,
             Value::Nil(span) => span,
+            Value::Callable {
+                name_span,
+                parameters,
+                body,
+            } => todo!(),
         }
         .clone()
     }
@@ -25,6 +37,11 @@ impl Value {
             Value::Number(_, number) => println!("{number}"),
             Value::Boolean(_, boolean) => println!("{boolean}"),
             Value::Nil(_) => println!("nil"),
+            Value::Callable {
+                name_span,
+                parameters,
+                body,
+            } => todo!(),
         }
     }
 }
