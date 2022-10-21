@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{
     expression::{
@@ -20,7 +20,7 @@ mod value;
 
 #[derive(Debug)]
 pub struct Interpreter {
-    environment_stack: Vec<Environment>,
+    current_scope: Rc<RefCell<Environment>>,
 }
 
 #[derive(Debug)]
@@ -55,33 +55,35 @@ impl Interpreter {
 
     pub fn new() -> Self {
         Self {
-            environment_stack: vec![Environment::new()],
+            current_scope: Rc::new(RefCell::new(Environment::new())),
         }
     }
 
-    fn current_scope(&mut self) -> &mut Environment {
-        self.environment_stack.last_mut().unwrap()
+    fn current_scope(&mut self) -> Rc<RefCell<Environment>> {
+        self.current_scope.clone()
     }
 
     fn assign(&mut self, name: String, new_value: Rc<Value>) -> Result<(), ()> {
-        for environment in self.environment_stack.iter_mut().rev() {
-            let result = environment.assign(&name, &new_value);
-
-            if result.is_ok() {
-                return result;
-            };
-        }
-        Err(())
+        (*self.current_scope).borrow_mut().assign(&name, &new_value)
     }
 
     fn get(&mut self, source: &str, token: Token) -> Option<Rc<Value>> {
-        for environment in self.environment_stack.iter_mut().rev() {
-            let result = environment.get(source, &token);
-            if result.is_some() {
-                return result;
-            };
-        }
-        None
+        (*self.current_scope).borrow_mut().get(source, &token)
+    }
+
+    fn define(&mut self, name: String, value: Rc<Value>) {
+        (*self.current_scope).borrow_mut().define(name, value);
+    }
+
+    fn push_scope(&mut self) -> Rc<RefCell<Environment>> {
+        let current_scope = self.current_scope.clone();
+        let new_scope = Environment::close_over(current_scope.clone());
+        self.current_scope = Rc::new(RefCell::new(new_scope));
+        current_scope
+    }
+
+    fn set_scope(&mut self, scope: Rc<RefCell<Environment>>) {
+        self.current_scope = scope;
     }
 
     pub fn interpret(&mut self, source: &str, declarations: Vec<Declaration>) -> Result<(), Error> {
@@ -114,17 +116,21 @@ impl Interpreter {
                 name,
                 parameters,
                 body,
-            } => self.current_scope().define(
-                name.span.slice(source).to_string(),
-                Rc::new(Value::Callable(Callable {
-                    name_span: name.span,
-                    parameters: parameters
-                        .iter()
-                        .map(|token| token.span.slice(source).to_string())
-                        .collect(),
-                    body: body.clone(),
-                })),
-            ),
+            } => {
+                let current_scope = self.current_scope();
+                self.define(
+                    name.span.slice(source).to_string(),
+                    Rc::new(Value::Callable(Callable {
+                        environment: current_scope,
+                        name_span: name.span,
+                        parameters: parameters
+                            .iter()
+                            .map(|token| token.span.slice(source).to_string())
+                            .collect(),
+                        body: body.clone(),
+                    })),
+                )
+            }
             Declaration::Variable { name, initialiser } => {
                 let value = if let Some(initialiser) = initialiser {
                     self.evaluate_expression(source, initialiser.clone())
@@ -132,8 +138,7 @@ impl Interpreter {
                 } else {
                     Rc::new(Value::Nil(name.span))
                 };
-                self.current_scope()
-                    .define(name.span.slice(source).to_string(), value);
+                self.define(name.span.slice(source).to_string(), value);
             }
             Declaration::Statement(statement) => self.evaluate_statement(source, statement)?,
         };
@@ -157,9 +162,9 @@ impl Interpreter {
                     .map_err(ErrorOrReturn::Err)?;
             }
             Statement::Block(declarations) => {
-                self.environment_stack.push(Environment::new());
+                let old_scope = self.push_scope();
                 let result = self.evaluate_declarations(source, declarations);
-                self.environment_stack.pop();
+                self.set_scope(old_scope);
                 result?;
             }
             Statement::If {
@@ -249,7 +254,7 @@ impl Interpreter {
             Expression::Variable(VariableExpression { name }) => {
                 let token = name;
                 self.get(source, token.clone())
-                    .ok_or(Error::VariableDoesntExist(token.clone()))
+                    .ok_or_else(|| Error::VariableDoesntExist(token.clone()))
             }
         }
     }
@@ -288,13 +293,15 @@ impl Interpreter {
             argument_values.push(argument_value);
         }
 
-        self.environment_stack.push(Environment::new());
+        let old_scope = self.current_scope.clone();
+        self.set_scope(Rc::new(RefCell::new(Environment::close_over(
+            callee.environment,
+        ))));
         for (paramater_name, argument) in callee.parameters.iter().zip(argument_values.iter()) {
-            self.current_scope()
-                .define(paramater_name.to_owned(), argument.clone())
+            self.define(paramater_name.to_owned(), argument.clone())
         }
         let result = self.evaluate_declarations(source, &callee.body);
-        self.environment_stack.pop();
+        self.set_scope(old_scope);
 
         match result {
             Ok(_) => Ok(Rc::new(Value::Nil(Span::new(0, 0)))),

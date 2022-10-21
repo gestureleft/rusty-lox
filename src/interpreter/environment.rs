@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::lexer::Token;
 
@@ -6,12 +6,21 @@ use super::value::Value;
 
 #[derive(Debug)]
 pub struct Environment {
+    parent: Option<Rc<RefCell<Environment>>>,
     values: HashMap<String, Rc<Value>>,
 }
 
 impl Environment {
     pub(crate) fn new() -> Self {
         Self {
+            parent: None,
+            values: HashMap::new(),
+        }
+    }
+
+    pub(crate) fn close_over(parent: Rc<RefCell<Environment>>) -> Self {
+        Self {
+            parent: Some(parent),
             values: HashMap::new(),
         }
     }
@@ -25,7 +34,7 @@ impl Environment {
         if value.is_some() {
             return value;
         };
-        None
+        (*(self.parent.as_ref()?)).borrow().get(source, token)
     }
 
     pub(crate) fn assign(&mut self, name: &String, new_value: &Rc<Value>) -> Result<(), ()> {
@@ -34,6 +43,12 @@ impl Environment {
             *value = new_value.clone();
             return Ok(());
         };
-        Err(())
+        if self.parent.is_none() {
+            return Err(());
+        };
+
+        (*self.parent.clone().unwrap())
+            .borrow_mut()
+            .assign(name, new_value)
     }
 }

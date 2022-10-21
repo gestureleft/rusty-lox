@@ -1,6 +1,8 @@
-use std::rc::Rc;
+use std::{cell::RefCell, rc::Rc};
 
 use crate::{span::Span, statement::Declaration};
+
+use super::environment::Environment;
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -13,6 +15,7 @@ pub enum Value {
 
 #[derive(Debug, Clone)]
 pub struct Callable {
+    pub environment: Rc<RefCell<Environment>>,
     pub name_span: Span,
     pub parameters: Vec<String>,
     pub body: Rc<Vec<Declaration>>,
