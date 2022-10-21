@@ -1,0 +1,7 @@
+
+fun test() {
+  return 1;
+  print "uh oh";
+}
+
+print(test());

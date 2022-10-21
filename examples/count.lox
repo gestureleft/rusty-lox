@@ -3,5 +3,8 @@ fun count(n) {
   print n;
 }
 
-count(3);
-count(3, 2);
+fun sayHi(first, last) {
+  print "Hi, " + first + " " + last + "!";
+}
+
+sayHi("Dear", "Reader");

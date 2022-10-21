@@ -20,14 +20,13 @@ pub struct Callable {
 
 impl Value {
     pub(crate) fn span(&self) -> Span {
-        match self {
+        *match self {
             Value::String(span, _) => span,
             Value::Number(span, _) => span,
             Value::Boolean(span, _) => span,
             Value::Nil(span) => span,
             Value::Callable(_) => todo!(),
         }
-        .clone()
     }
 
     pub(crate) fn pretty_print(&self) {

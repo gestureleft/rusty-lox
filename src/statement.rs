@@ -30,4 +30,8 @@ pub enum Statement {
         condition: Rc<Expression>,
         body: Box<Statement>,
     },
+    Return {
+        keyword: Token,
+        value: Rc<Expression>,
+    },
 }

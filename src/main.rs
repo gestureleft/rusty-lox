@@ -1,4 +1,5 @@
 #![feature(let_chains)]
+#![feature(try_trait_v2)]
 
 mod error;
 mod expression;

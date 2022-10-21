@@ -4,7 +4,8 @@ use crate::{
     expression::{
         binary_expression, boolean_literal_expression, grouping_expression, nil_literal,
         number_literal_expression, string_literal_expression, unary_expression,
-        AssignmentExpression, CallExpression, Expression, LogicalExpression, VariableExpression,
+        AssignmentExpression, CallExpression, Expression, LiteralExpression, LogicalExpression,
+        VariableExpression,
     },
     lexer::{self, Token, TokenType},
     span::Span,
@@ -119,6 +120,10 @@ impl Parser {
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::Print]) {
             return self.parse_print_statement(tokens);
         };
+        // Return statement
+        if self.consume_token_if_in_vec(tokens, &vec![TokenType::Return]) {
+            return self.parse_return_statement(tokens);
+        }
         // Block statement
         if self.consume_token_if_in_vec(tokens, &vec![TokenType::LeftBrace]) {
             return Some(Statement::Block(self.parse_block(tokens)?));
@@ -126,6 +131,27 @@ impl Parser {
 
         // Expression statement
         self.parse_expression_statement(tokens)
+    }
+
+    fn parse_return_statement(&mut self, tokens: &[Token]) -> Option<Statement> {
+        let keyword = tokens.get(self.current_index - 1).cloned()?;
+
+        let current_token = self.current_token(tokens)?;
+
+        let expression = if current_token.type_ == TokenType::Semicolon {
+            Rc::new(Expression::Literal(LiteralExpression::Nil(
+                current_token.span,
+            )))
+        } else {
+            self.parse_expression(tokens)?
+        };
+
+        self.consume_token_of_type(tokens, TokenType::Semicolon)?;
+
+        Some(Statement::Return {
+            keyword,
+            value: expression,
+        })
     }
 
     fn parse_for_statement(&mut self, tokens: &[Token]) -> Option<Statement> {

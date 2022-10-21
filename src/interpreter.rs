@@ -23,6 +23,12 @@ pub struct Interpreter {
     environment_stack: Vec<Environment>,
 }
 
+#[derive(Debug)]
+enum ErrorOrReturn {
+    Err(Error),
+    Return(Rc<Value>),
+}
+
 impl Interpreter {
     fn as_number(&self, value: Rc<Value>) -> Result<f64, Error> {
         if let Value::Number(_, value) = *value {
@@ -79,24 +85,30 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, source: &str, declarations: Vec<Declaration>) -> Result<(), Error> {
-        self.evaluate_declarations(source, &declarations)
+        let result = self.evaluate_declarations(source, &declarations);
+        match result {
+            Ok(_) => Ok(()),
+            Err(ErrorOrReturn::Return(_)) => Ok(()),
+            Err(ErrorOrReturn::Err(error)) => Err(error),
+        }
     }
 
     fn evaluate_declarations(
         &mut self,
         source: &str,
         declarations: &[Declaration],
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorOrReturn> {
         declarations
             .iter()
-            .try_for_each(|declaration| self.evaluate_declaration(source, declaration))
+            .try_for_each(|declaration| self.evaluate_declaration(source, declaration))?;
+        Ok(())
     }
 
     fn evaluate_declaration(
         &mut self,
         source: &str,
         declaration: &Declaration,
-    ) -> Result<(), Error> {
+    ) -> Result<(), ErrorOrReturn> {
         match declaration {
             Declaration::Function {
                 name,
@@ -115,7 +127,8 @@ impl Interpreter {
             ),
             Declaration::Variable { name, initialiser } => {
                 let value = if let Some(initialiser) = initialiser {
-                    self.evaluate_expression(source, initialiser.clone())?
+                    self.evaluate_expression(source, initialiser.clone())
+                        .map_err(ErrorOrReturn::Err)?
                 } else {
                     Rc::new(Value::Nil(name.span))
                 };
@@ -127,27 +140,36 @@ impl Interpreter {
         Ok(())
     }
 
-    fn evaluate_statement(&mut self, source: &str, statement: &Statement) -> Result<(), Error> {
+    fn evaluate_statement(
+        &mut self,
+        source: &str,
+        statement: &Statement,
+    ) -> Result<(), ErrorOrReturn> {
         match statement {
             Statement::Print(expression) => {
-                let result = self.evaluate_expression(source, expression.clone())?;
+                let result = self
+                    .evaluate_expression(source, expression.clone())
+                    .map_err(ErrorOrReturn::Err)?;
                 result.pretty_print();
             }
             Statement::Expression(expression) => {
-                self.evaluate_expression(source, expression.clone())?;
+                self.evaluate_expression(source, expression.clone())
+                    .map_err(ErrorOrReturn::Err)?;
             }
-
             Statement::Block(declarations) => {
                 self.environment_stack.push(Environment::new());
-                self.evaluate_declarations(source, declarations)?;
+                let result = self.evaluate_declarations(source, declarations);
                 self.environment_stack.pop();
+                result?;
             }
             Statement::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                let condition = self.evaluate_expression(source, condition.clone())?;
+                let condition = self
+                    .evaluate_expression(source, condition.clone())
+                    .map_err(ErrorOrReturn::Err)?;
                 if self.is_truthy(condition) {
                     self.evaluate_statement(source, then_branch)?;
                 } else if let Some(else_branch) = else_branch {
@@ -155,11 +177,21 @@ impl Interpreter {
                 }
             }
             Statement::While { condition, body } => {
-                let mut condition_value = self.evaluate_expression(source, condition.clone())?;
+                let mut condition_value = self
+                    .evaluate_expression(source, condition.clone())
+                    .map_err(ErrorOrReturn::Err)?;
                 while self.is_truthy(condition_value) {
                     self.evaluate_statement(source, body)?;
-                    condition_value = self.evaluate_expression(source, condition.clone())?;
+                    condition_value = self
+                        .evaluate_expression(source, condition.clone())
+                        .map_err(ErrorOrReturn::Err)?
                 }
+            }
+            Statement::Return { value, .. } => {
+                let result = self
+                    .evaluate_expression(source, value.clone())
+                    .map_err(ErrorOrReturn::Err)?;
+                return Err(ErrorOrReturn::Return(result));
             }
         };
         Ok(())
@@ -252,7 +284,8 @@ impl Interpreter {
         let mut argument_values = Vec::new();
 
         for argument in arguments {
-            argument_values.push(self.evaluate_expression(source, argument.clone())?);
+            let argument_value = self.evaluate_expression(source, argument.clone())?;
+            argument_values.push(argument_value);
         }
 
         self.environment_stack.push(Environment::new());
@@ -260,10 +293,14 @@ impl Interpreter {
             self.current_scope()
                 .define(paramater_name.to_owned(), argument.clone())
         }
-        self.evaluate_declarations(source, &callee.body)?;
+        let result = self.evaluate_declarations(source, &callee.body);
         self.environment_stack.pop();
 
-        Ok(Rc::new(Value::Nil(Span::new(0, 0))))
+        match result {
+            Ok(_) => Ok(Rc::new(Value::Nil(Span::new(0, 0)))),
+            Err(ErrorOrReturn::Return(value)) => Ok(value),
+            Err(ErrorOrReturn::Err(error)) => Err(error),
+        }
     }
 
     fn evaluate_unary_expression(
@@ -435,7 +472,7 @@ impl Interpreter {
                 let left = self.as_number(left)?;
                 let right = self.evaluate_expression(source, right)?;
                 let right = self.as_number(right)?;
-                Rc::new(Value::Boolean(span, left < right))
+                Rc::new(Value::Boolean(span, left <= right))
             }
             Identifier => todo!(),
             String_ => todo!(),
@@ -466,7 +503,7 @@ impl Interpreter {
             Value::Number(span, _) => Err(Error::type_error(
                 "String".to_string(),
                 "Number".to_string(),
-                span.clone(),
+                *span,
             )),
             Value::Boolean(_, _) => todo!(),
             Value::Nil(_) => todo!(),
